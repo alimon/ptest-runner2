@@ -145,3 +145,19 @@ get_available_ptests(const char *dir)
 
 	return head;
 }
+
+extern int
+print_ptests(struct ptest_list *head, FILE *fp)
+{
+	if (ptest_list_length(head) <= 0) {
+		fprintf(fp, PRINT_PTESTS_NOT_FOUND);
+		return 1;
+	} else {
+		struct ptest_list *n;
+		fprintf(fp, PRINT_PTESTS_AVAILABLE);
+		PTEST_LIST_ITERATE_START(head, n);
+			printf("%s\t%s\n", n->ptest, n->run_ptest);
+		PTEST_LIST_ITERATE_END;
+		return 0;
+	}
+}

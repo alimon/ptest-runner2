@@ -20,12 +20,18 @@
  */
 
 #include <string.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
+
 #include <check.h>
 
 #include "ptest_list.h"
 #include "utils.h"
+
+#define PRINT_PTEST_BUF_SIZE 8192
+#define PRINT_PTEST_MAX_LINE 512
 
 extern char *opts_directory;
 
@@ -58,6 +64,30 @@ START_TEST(test_get_available_ptests)
 }
 END_TEST
 
+START_TEST(test_print_ptests)
+	struct ptest_list *head;
+
+	char *buf;
+	size_t size = PRINT_PTEST_BUF_SIZE;
+	FILE *fp;
+
+	fp = open_memstream(&buf, &size);
+	ck_assert(fp != NULL);
+
+	head = ptest_list_alloc();
+	ck_assert(print_ptests(head, fp) == 1);
+	ptest_list_free_all(head);
+	ck_assert(strcmp(buf, PRINT_PTESTS_NOT_FOUND) == 0);
+
+	head = get_available_ptests(opts_directory);
+	ck_assert(print_ptests(head, fp) == 0);
+	ptest_list_free_all(head);
+	ck_assert(strcmp(buf, PRINT_PTESTS_AVAILABLE) == 0);
+
+	fclose(fp);
+	free(buf);
+END_TEST
+
 Suite *
 utils_suite()
 {
@@ -68,6 +98,7 @@ utils_suite()
 	tc_core = tcase_create("Core");
 
 	tcase_add_test(tc_core, test_get_available_ptests);
+	tcase_add_test(tc_core, test_print_ptests);
 
 	suite_add_tcase(s, tc_core);
 

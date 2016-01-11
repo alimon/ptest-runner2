@@ -25,6 +25,9 @@
 #define PTEST_LIST_FREE_CLEAN(x) { ptest_list_free(x); x = NULL; }
 #define PTEST_LIST_FREE_ALL_CLEAN(x) { ptest_list_free_all(x); x = NULL; }
 
+#define PTEST_LIST_ITERATE_START(head, p) for (p = head->next; p != NULL; p = p->next) { 
+#define PTEST_LIST_ITERATE_END }
+
 struct ptest_list {
 	char *ptest;
 	char *run_ptest;
