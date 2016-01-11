@@ -22,6 +22,9 @@
 #ifndef _PTEST_RUNNER_LIST_H_
 #define _PTEST_RUNNER_LIST_H_
 
+#define PTEST_LIST_FREE_CLEAN(x) { ptest_list_free(x); x = NULL; }
+#define PTEST_LIST_FREE_ALL_CLEAN(x) { ptest_list_free_all(x); x = NULL; }
+
 struct ptest_list {
 	char *ptest;
 	char *run_ptest;

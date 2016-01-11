@@ -7,11 +7,13 @@ SOURCES=main.c $(BASE_SOURCES)
 OBJECTS=$(SOURCES:.c=.o)
 EXECUTABLE=ptest-runner
 
-TEST_SOURCES=tests/main.c tests/ptest_list.c $(BASE_SOURCES)
+TEST_SOURCES=tests/main.c tests/ptest_list.c tests/utils.c $(BASE_SOURCES)
 TEST_OBJECTS=$(TEST_SOURCES:.c=.o)
 TEST_EXECUTABLE=ptest-runner-test
 TEST_LDFLAGS=-lm -lrt -lpthread
 TEST_LIBSTATIC=-lcheck
+
+TEST_DATA=$(shell echo `pwd`/tests/data)
 
 all: $(SOURCES) $(EXECUTABLE)
 
@@ -22,6 +24,9 @@ tests: $(TEST_SOURCES) $(TEST_EXECUTABLE)
 
 $(TEST_EXECUTABLE): $(TEST_OBJECTS)
 	$(CC) $(LDFLAGS) $(TEST_LDFLAGS) $(TEST_OBJECTS) -o $@ $(TEST_LIBSTATIC)
+
+check: $(TEST_EXECUTABLE)
+	./$(TEST_EXECUTABLE) -d $(TEST_DATA)
 
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $@

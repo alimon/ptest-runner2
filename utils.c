@@ -19,10 +19,22 @@
  * 	Aníbal Limón <anibal.limon@intel.com>
  */
 
-#include <stdlib.h>
+#define _GNU_SOURCE 
 #include <stdio.h>
 
-extern void
+#include <dirent.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include <errno.h>
+
+#include "ptest_list.h"
+#include "utils.h"
+
+void
 check_allocation1(void *p, size_t size, char *file, int line, int exit_on_null)
 {
 	if (p == NULL) {
@@ -31,4 +43,105 @@ check_allocation1(void *p, size_t size, char *file, int line, int exit_on_null)
 		if (exit_on_null)
 			exit(1);
 	}
+}
+
+
+struct ptest_list *
+get_available_ptests(const char *dir)
+{
+	struct ptest_list *head;
+	struct stat st_buf;
+
+	int n, i;
+	struct dirent **namelist;
+	int fail;
+	int saved_errno;
+
+	do
+	{
+		head = ptest_list_alloc();
+		CHECK_ALLOCATION(head, sizeof(struct ptest_list *), 0);
+		if (head == NULL)
+			break;
+
+		if (stat(dir, &st_buf) == -1) {
+			PTEST_LIST_FREE_CLEAN(head);
+			break;
+		}
+
+		if (!S_ISDIR(st_buf.st_mode)) {
+			PTEST_LIST_FREE_CLEAN(head);
+			errno = EINVAL;
+			break;
+		}
+
+		n = scandir(dir, &namelist, NULL, alphasort);
+		if (n == -1) {
+			PTEST_LIST_FREE_CLEAN(head);
+			break;
+		}
+
+
+		fail = 0;
+		for (i = 0; i < n; i++) {
+			char *run_ptest;
+
+			char *d_name = strdup(namelist[i]->d_name);
+			CHECK_ALLOCATION(d_name, sizeof(namelist[i]->d_name), 0);
+			if (d_name == NULL) {
+				fail = 1;
+				saved_errno = errno;
+				break;
+			}
+
+			if (strcmp(d_name, ".") == 0 ||
+			    strcmp(d_name, "..") == 0) {
+				free(d_name);
+				continue;
+			}
+
+			if (asprintf(&run_ptest, "%s/%s/ptest/run-ptest",
+			    dir, d_name) == -1)  {
+				fail = 1;
+				saved_errno = errno;
+				free(d_name);
+				break;
+			}
+
+			if (stat(run_ptest, &st_buf) == -1) {
+				free(run_ptest);
+				free(d_name);
+				continue;
+			}
+
+			if (!S_ISREG(st_buf.st_mode)) {
+				free(run_ptest);
+				free(d_name);
+				continue;
+			}
+
+			struct ptest_list *p = ptest_list_add(head,
+				d_name, run_ptest);
+			CHECK_ALLOCATION(p, sizeof(struct ptest_list *), 0);
+			if (p == NULL) {
+				fail = 1;
+				saved_errno = errno;
+				free(run_ptest);
+				free(d_name);
+				break;
+			}
+		}
+
+		for (i = 0 ; i < n; i++)
+			free(namelist[i]);
+		free(namelist);
+
+		if (fail) {
+			PTEST_LIST_FREE_ALL_CLEAN(head);
+			errno = saved_errno;
+			break;
+		}
+	} while (0);
+
+	return head;
 }
