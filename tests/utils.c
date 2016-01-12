@@ -35,28 +35,29 @@
 
 extern char *opts_directory;
 
+static char *ptests_found[] = {
+	"bash",
+	"gcc",
+	"glibc",
+	"python",
+	NULL
+};
+static int ptests_found_length = 4;
+static char *ptests_not_found[] = {
+	"busybox",
+	"perl",
+	NULL,
+};
+
 START_TEST(test_get_available_ptests)
 {
 	struct ptest_list *head = get_available_ptests(opts_directory);
-	int expected_length = 4;
-	char *ptests[] = {
-		"gcc",
-		"glibc",
-		"python",
-		"bash",
-		NULL,
-	};
-	char *ptests_not_found[] = {
-		"busybox",
-		"perl",
-		NULL,
-	};
 	int i;
 
-	ck_assert(ptest_list_length(head) == expected_length);
+	ck_assert(ptest_list_length(head) == ptests_found_length);
 
-	for (i = 0; ptests[i] != NULL; i++)
-		ck_assert(ptest_list_search(head, ptests[i]) != NULL);
+	for (i = 0; ptests_found[i] != NULL; i++)
+		ck_assert(ptest_list_search(head, ptests_found[i]) != NULL);
 	for (i = 0; ptests_not_found[i] != NULL; i++)
 		ck_assert(ptest_list_search(head, ptests_not_found[i]) == NULL);
 
@@ -76,13 +77,6 @@ START_TEST(test_print_ptests)
 
 	int i;
 	char *ptest;
-	char *expected_ptests[] = {
-		"bash	",
-		"gcc	",
-		"glibc	",
-		"python	",
-		NULL
-	};
 
 	fp = open_memstream(&buf, &size);
 	ck_assert(fp != NULL);
@@ -106,7 +100,7 @@ START_TEST(test_print_ptests)
 	ck_assert(line != NULL);
 	ck_assert(strcmp(line, PRINT_PTESTS_AVAILABLE) == 0);
 	i = 0;
-	while ((ptest = expected_ptests[i]) != NULL) {
+	while ((ptest = ptests_found[i]) != NULL) {
 		line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp);
 		ck_assert(line != NULL);
 		line[strlen(ptest)] = '\0'; // XXX: Only compare the name part
