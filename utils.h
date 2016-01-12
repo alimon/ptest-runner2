@@ -34,5 +34,6 @@ extern void check_allocation1(void *, size_t, char *, int, int);
 extern struct ptest_list *get_available_ptests(const char *);
 extern int print_ptests(struct ptest_list *, FILE *);
 extern struct ptest_list *filter_ptests(struct ptest_list *, char **, int);
+extern void run_ptests(struct ptest_list *, int, const char *progname, FILE *);
 
 #endif

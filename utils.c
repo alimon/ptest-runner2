@@ -22,6 +22,7 @@
 #define _GNU_SOURCE 
 #include <stdio.h>
 
+#include <time.h>
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -33,6 +34,21 @@
 
 #include "ptest_list.h"
 #include "utils.h"
+
+#define GET_STIME_BUF_SIZE 1024
+
+static inline char *
+get_stime(char *stime, size_t size)
+{
+	time_t t;
+	struct tm *lt;
+
+	t = time(NULL);
+	lt = localtime(&t);
+	strftime(stime, size, "%Y-%m-%dT%H:%M", lt);
+
+	return stime;
+}
 
 void
 check_allocation1(void *p, size_t size, char *file, int line, int exit_on_null)
@@ -211,4 +227,20 @@ filter_ptests(struct ptest_list *head, char **ptests, int ptest_num)
 	} while (0);
 
 	return head_new;
+}
+
+void
+run_ptests(struct ptest_list *head, int timeout, const char *progname, FILE *fp)
+{
+	struct ptest_list *p;
+	char stime[GET_STIME_BUF_SIZE];
+
+	fprintf(fp, "START: %s\n", progname);
+	PTEST_LIST_ITERATE_START(head, p);
+		fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
+		fprintf(fp, "BEGIN: %s\n", p->run_ptest);
+		fprintf(fp, "END: %s\n", p->run_ptest);
+		fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
+	PTEST_LIST_ITERATE_END;
+	fprintf(fp, "STOP: %s\n", progname);
 }
