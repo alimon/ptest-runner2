@@ -149,7 +149,7 @@ get_available_ptests(const char *dir)
 int
 print_ptests(struct ptest_list *head, FILE *fp)
 {
-	if (ptest_list_length(head) <= 0) {
+	if (head == NULL || ptest_list_length(head) <= 0) {
 		fprintf(fp, PRINT_PTESTS_NOT_FOUND);
 		return 1;
 	} else {

@@ -22,9 +22,13 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include "utils.h"
 #include "ptest_list.h"
+
+#define VALIDATE_PTR_RINT(ptr) if (ptr == NULL) { errno = EINVAL; return -1; } 
+#define VALIDATE_PTR_RNULL(ptr) if (ptr == NULL) { errno = EINVAL; return NULL; } 
 
 struct ptest_list *
 ptest_list_alloc()
@@ -56,6 +60,8 @@ ptest_list_free_all(struct ptest_list *head)
 	int i = 0;
 	struct ptest_list *p, *q;
 
+	VALIDATE_PTR_RINT(head);
+
 	p = head;
 	while (p != NULL) {
 		q = p;
@@ -74,6 +80,8 @@ ptest_list_length(struct ptest_list *head)
 	int i = 0;
 	struct ptest_list *p;
 
+	VALIDATE_PTR_RINT(head);
+
 	for (p = head->next; p != NULL; p = p->next)
 		i++;
 
@@ -85,6 +93,9 @@ ptest_list_search(struct ptest_list *head, char *ptest)
 {
 	struct ptest_list *q = NULL;
 	struct ptest_list *p;
+
+	VALIDATE_PTR_RNULL(head);
+	VALIDATE_PTR_RNULL(ptest);
 
 	for (p = head; p != NULL; p = p->next) {
 		if (p->ptest == NULL) 
@@ -102,8 +113,14 @@ ptest_list_search(struct ptest_list *head, char *ptest)
 struct ptest_list *
 ptest_list_add(struct ptest_list *head, char *ptest, char *run_ptest)
 {
-	struct ptest_list *n = ptest_list_alloc();
-	struct ptest_list *p;
+	struct ptest_list *n, *p; 
+
+	VALIDATE_PTR_RNULL(head);
+	VALIDATE_PTR_RNULL(ptest);
+
+	n = ptest_list_alloc();
+	if (n == NULL)
+		return NULL;
 
 	n->ptest = ptest;
 	n->run_ptest = run_ptest;
@@ -122,8 +139,13 @@ ptest_list_add(struct ptest_list *head, char *ptest, char *run_ptest)
 struct ptest_list *
 ptest_list_remove(struct ptest_list *head, char *ptest, int free)
 {
-	struct ptest_list *p = ptest_list_search(head, ptest);
+	struct ptest_list *p; 
 	struct ptest_list *q, *r;
+
+	VALIDATE_PTR_RNULL(head);
+	VALIDATE_PTR_RNULL(ptest);
+
+	p = ptest_list_search(head, ptest);
 
 	if (p != NULL) {
 		q = p->prev;
