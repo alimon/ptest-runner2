@@ -50,6 +50,8 @@ main(int argc, char *argv[])
 	int ptest_num = 0;
 	int i;
 
+	struct ptest_list *head, *run;
+
 	opts.directory = strdup(DEFAULT_DIRECTORY);
 	opts.list = 0;
 	opts.timeout = DEFAULT_TIMEOUT;
@@ -90,6 +92,36 @@ main(int argc, char *argv[])
 			CHECK_ALLOCATION(opts.ptests[i], 1, 1);
 		}
 	}
+
+	head = get_available_ptests(opts.directory);
+	if (head == NULL || ptest_list_length(head) == 0) {
+		fprintf(stderr, PRINT_PTESTS_NOT_FOUND);
+		return 1;
+	}
+
+	if (opts.list) {
+		print_ptests(head, stdout);
+		return 0;
+	}
+
+	run = head;
+	if (ptest_num > 0) {
+		for (i = 0; i < ptest_num; i++) {
+			if (ptest_list_search(head, opts.ptests[i]) == NULL) {
+				fprintf(stderr, "%s ptest isn't available.\n",
+					opts.ptests[i]);
+				return 1;
+			}
+		}
+
+		run = filter_ptests(head, opts.ptests, ptest_num);
+		CHECK_ALLOCATION(run, ptest_num, 1);
+		ptest_list_free_all(head);
+	} 
+
+	run_ptests(run, opts.timeout, argv[0], stdout);
+
+	ptest_list_free_all(run);
 
 	return 0;
 }
