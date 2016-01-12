@@ -23,6 +23,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include "utils.h"
 
@@ -49,6 +50,7 @@ main(int argc, char *argv[])
 	int opt;
 	int ptest_num = 0;
 	int i;
+	int rc;
 
 	struct ptest_list *head, *run;
 
@@ -119,9 +121,9 @@ main(int argc, char *argv[])
 		ptest_list_free_all(head);
 	} 
 
-	run_ptests(run, opts.timeout, argv[0], stdout);
+	rc = run_ptests(run, opts.timeout, argv[0], stdout, stderr);
 
 	ptest_list_free_all(run);
 
-	return 0;
+	return rc;
 }

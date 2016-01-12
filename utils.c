@@ -22,9 +22,12 @@
 #define _GNU_SOURCE 
 #include <stdio.h>
 
+#include <signal.h>
+#include <fcntl.h>
 #include <time.h>
 #include <dirent.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
@@ -229,18 +232,133 @@ filter_ptests(struct ptest_list *head, char **ptests, int ptest_num)
 	return head_new;
 }
 
-void
-run_ptests(struct ptest_list *head, int timeout, const char *progname, FILE *fp)
+static inline void
+run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 {
+	char **argv = malloc(sizeof(char) * 2);
+
+	argv[0] = run_ptest;
+	argv[1] = NULL;
+
+	dup2(STDOUT_FILENO, fd_stdout);
+	dup2(STDERR_FILENO, fd_stderr);
+	execv(run_ptest, argv);
+
+	exit(0);
+}
+
+static inline int
+wait_child(const char *run_ptest, pid_t pid, int timeout, int *fds, FILE **fps)
+{
+	fd_set rfds;
+	struct timeval tv;
+	time_t sentinel;
+	int r;
+
+	int status;
+	int waitflags;
+
+	tv.tv_sec = 0;
+	tv.tv_usec = 1000; // 1ms
+
+	FD_ZERO(&rfds);
+	FD_SET(fds[0], &rfds);
+	FD_SET(fds[1], &rfds);
+
+	sentinel = time(NULL);
+
+	while (1) {
+		waitflags = WNOHANG;
+
+		r = select(2, &rfds, NULL, NULL, &tv);
+		if (r > 0) {
+			int in = -1, out = -1;
+#define MAX_SIZE 1024
+			char buf[MAX_SIZE];
+			int r;
+
+			if (FD_ISSET(fds[0], &rfds)) {
+				in = fds[0];
+				out = fileno(fps[0]);
+			} else if (FD_ISSET(fds[1], &rfds)) {
+				in = fds[1];
+				out = fileno(fps[1]);
+			}
+
+			if (in != -1 && out != -1)
+				while ((r = read(in, buf, MAX_SIZE)) > 0)
+					write(out, buf, r);
+
+			sentinel = time(NULL);
+		} else if (timeout >= 0 && ((time(NULL) - sentinel) > timeout)) {
+			fprintf(stderr, "TIMEOUT: %s\n", run_ptest);
+			kill(pid, SIGKILL);
+			waitflags = 0;
+		}
+
+		if (waitpid(pid, &status, waitflags) == pid)
+			break;
+	}
+
+	return status;
+}
+
+int
+run_ptests(struct ptest_list *head, int timeout, const char *progname,
+		FILE *fp, FILE *fp_stderr)
+{
+	int rc = 0;
+
 	struct ptest_list *p;
 	char stime[GET_STIME_BUF_SIZE];
 
-	fprintf(fp, "START: %s\n", progname);
-	PTEST_LIST_ITERATE_START(head, p);
-		fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
-		fprintf(fp, "BEGIN: %s\n", p->run_ptest);
-		fprintf(fp, "END: %s\n", p->run_ptest);
-		fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
-	PTEST_LIST_ITERATE_END;
-	fprintf(fp, "STOP: %s\n", progname);
+	pid_t child;
+	int pipefd_stdout[2];
+	int pipefd_stderr[2];
+
+	do
+	{
+		if ((rc = pipe2(pipefd_stdout, O_NONBLOCK)) == -1) 
+			break;
+
+		if ((rc = pipe2(pipefd_stderr, O_NONBLOCK)) == -1) {
+			close(pipefd_stdout[0]);
+			close(pipefd_stdout[1]);
+			break;
+		}
+
+		fprintf(fp, "START: %s\n", progname);
+		PTEST_LIST_ITERATE_START(head, p);
+			child = fork();
+			if (child == -1) {
+				rc = -1;
+				break;
+			} else if (child == 0) {
+				run_child(p->run_ptest, pipefd_stdout[1], pipefd_stderr[1]);
+			} else {
+				int status;
+				int fds[2]; fds[0] = pipefd_stdout[0]; fds[1] = pipefd_stderr[0];
+				FILE *fps[2]; fps[0] = fp; fps[1] = fp_stderr;
+
+				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
+				fprintf(fp, "BEGIN: %s\n", p->run_ptest);
+
+				status = wait_child(p->run_ptest, child, timeout, fds, fps);
+				if (status)
+					rc += 1;
+
+				fprintf(fp, "END: %s\n", p->run_ptest);
+				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
+			}
+		PTEST_LIST_ITERATE_END;
+		fprintf(fp, "STOP: %s\n", progname);
+
+		close(pipefd_stdout[0]); close(pipefd_stdout[1]);
+		close(pipefd_stderr[0]); close(pipefd_stderr[1]);
+	} while (0);
+
+	if (rc == -1) 
+		fprintf(fp_stderr, "run_ptests fails: %s", strerror(errno));
+
+	return rc;
 }
