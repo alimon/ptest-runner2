@@ -23,8 +23,19 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <check.h>
+#include <errno.h>
 
 #include "ptest_list.h"
+
+static int ptests_num = 6;
+static char *ptest_names[] = {
+	"python",
+	"glibc",
+	"busybox",
+	"gcc",
+	"gdb",
+	"perl",
+};
 
 START_TEST(test_alloc_free)
 {
@@ -44,12 +55,15 @@ END_TEST
 
 START_TEST(test_free_all)
 {
-	struct ptest_list *head = ptest_list_alloc();
-	int n = 5;
+	struct ptest_list *head = NULL;
 	int i;
  
-	for (i = 0; i < n; i++)
-		ptest_list_add(head, NULL, NULL);
+	ck_assert(ptest_list_free_all(head) == -1);
+	ck_assert(errno == EINVAL);
+
+	head = ptest_list_alloc();
+	for (i = 0; i < ptests_num; i++)
+		ptest_list_add(head, strdup(ptest_names[i]), NULL);
 
 	ptest_list_free_all(head);
 }
@@ -58,39 +72,37 @@ END_TEST
 
 START_TEST(test_length)
 {
-	struct ptest_list *head = ptest_list_alloc();
-	int n = 5;
+	struct ptest_list *head = NULL;
 	int i;
- 
-	for (i = 0; i < n; i++)
-		ptest_list_add(head, NULL, NULL);
 
-	ck_assert_int_eq(ptest_list_length(head), n);
+	ck_assert(ptest_list_length(head) == -1);
+	ck_assert(errno == EINVAL);
+ 
+	head = ptest_list_alloc();
+	for (i = 0; i < ptests_num; i++)
+		ptest_list_add(head, strdup(ptest_names[i]), NULL);
+
+	ck_assert_int_eq(ptest_list_length(head), ptests_num);
 	ptest_list_free_all(head);
 }
 END_TEST
 
 START_TEST(test_search)
 {
-	struct ptest_list *head = ptest_list_alloc();
+	struct ptest_list *head = NULL;
 	int i;
-	int n = 6;
-	char *ptest_names[] = {
-		"python",
-		"glibc",
-		"busybox",
-		"gcc",
-		"gdb",
-		"perl",
-	};
 	char *ptest;
 
-	for (i = 0; i < n; i++) {
+	ck_assert(ptest_list_search(head, NULL) == NULL);
+	ck_assert(errno == EINVAL);
+
+	head = ptest_list_alloc();
+	for (i = 0; i < ptests_num; i++) {
 		ptest = strdup(ptest_names[i]);
 		ptest_list_add(head, ptest, NULL);
 	}
 
-	for (i = n - 1; i >= 0; i--)
+	for (i = ptests_num - 1; i >= 0; i--)
 		ck_assert(ptest_list_search(head, ptest_names[i]) != NULL);
 
 	ptest_list_free_all(head);
@@ -101,18 +113,10 @@ START_TEST(test_remove)
 {
 	struct ptest_list *head = ptest_list_alloc();
 	int i;
-	int n = 6;
-	char *ptest_names[] = {
-		"python",
-		"glibc",
-		"busybox",
-		"gcc",
-		"gdb",
-		"perl",
-	};
 	char *ptest;
+	int n = ptests_num;
 
-	for (i = 0; i < n; i++) {
+	for (i = 0; i < ptests_num; i++) {
 		ptest = strdup(ptest_names[i]);
 		ptest_list_add(head, ptest, NULL);
 	}
@@ -120,7 +124,7 @@ START_TEST(test_remove)
 	/* Remove node free'ing */
 	ck_assert(ptest_list_remove(head, "python", 1) == NULL);
 	ck_assert(ptest_list_search(head, "python") == NULL);
-	n = n -1;
+	n = n - 1;
 	ck_assert_int_eq(ptest_list_length(head), n);
 
 	/* Remove node without free'ing */

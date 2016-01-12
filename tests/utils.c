@@ -87,6 +87,11 @@ START_TEST(test_print_ptests)
 	fp = open_memstream(&buf, &size);
 	ck_assert(fp != NULL);
 
+	ck_assert(print_ptests(NULL, fp) == 1);
+	line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp);
+	ck_assert(line != NULL);
+	ck_assert(strcmp(line, PRINT_PTESTS_NOT_FOUND) == 0);
+
 	head = ptest_list_alloc();
 	ck_assert(print_ptests(head, fp) == 1);
 	ptest_list_free_all(head);
