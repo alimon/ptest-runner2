@@ -161,3 +161,54 @@ print_ptests(struct ptest_list *head, FILE *fp)
 		return 0;
 	}
 }
+
+struct ptest_list *
+filter_ptests(struct ptest_list *head, char **ptests, int ptest_num)
+{
+	struct ptest_list *head_new = NULL, *n;
+	int fail = 0, i, saved_errno;
+
+	do {
+		if (head == NULL || ptests == NULL || ptest_num <= 0) {
+			errno = EINVAL;
+			break;
+		}
+
+		head_new = ptest_list_alloc();
+		if (head_new == NULL) 
+			break;
+
+		for (i = 0; i < ptest_num; i++) {
+			char *ptest;
+			char *run_ptest;
+
+			n = ptest_list_search(head, ptests[i]);
+			if (n == NULL) {
+				saved_errno = errno;
+				fail = 1;
+				break;
+			}
+
+			ptest = strdup(n->ptest);
+			run_ptest = strdup(n->run_ptest);
+			if (ptest == NULL || run_ptest == NULL) {
+				saved_errno = errno;
+				fail = 1;
+				break;
+			}
+
+			if (ptest_list_add(head_new, ptest, run_ptest) == NULL) {
+				saved_errno = errno;
+				fail = 1;
+				break;
+			}
+		}
+
+		if (fail) {
+			PTEST_LIST_FREE_ALL_CLEAN(head_new);
+			errno = saved_errno;
+		} 
+	} while (0);
+
+	return head_new;
+}

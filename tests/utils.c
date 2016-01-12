@@ -112,6 +112,29 @@ START_TEST(test_print_ptests)
 	free(buf);
 END_TEST
 
+START_TEST(test_filter_ptests)
+	struct ptest_list *head = get_available_ptests(opts_directory);
+	struct ptest_list *head_new;
+	char *ptest_not_exists[] = {
+		"glib",
+	};
+	char *ptest_exists[] = {
+		"glibc",
+		"gcc",
+		"python",
+	};
+
+	ck_assert(filter_ptests(NULL, NULL, -1) == NULL && errno == EINVAL);
+	ck_assert(filter_ptests(head, ptest_not_exists, 1) == NULL);
+
+	head_new = filter_ptests(head, ptest_exists, 3);
+	ck_assert(head_new != NULL);
+	ck_assert(ptest_list_length(head_new) == 3);
+
+	ptest_list_free_all(head);
+	ptest_list_free_all(head_new);
+END_TEST
+
 Suite *
 utils_suite()
 {
@@ -123,6 +146,7 @@ utils_suite()
 
 	tcase_add_test(tc_core, test_get_available_ptests);
 	tcase_add_test(tc_core, test_print_ptests);
+	tcase_add_test(tc_core, test_filter_ptests);
 
 	suite_add_tcase(s, tc_core);
 
