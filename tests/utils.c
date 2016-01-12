@@ -71,18 +71,43 @@ START_TEST(test_print_ptests)
 	size_t size = PRINT_PTEST_BUF_SIZE;
 	FILE *fp;
 
+	char *line;
+	char line_buf[PRINT_PTEST_BUF_SIZE];
+
+	int i;
+	char *ptest;
+	char *expected_ptests[] = {
+		"bash	",
+		"gcc	",
+		"glibc	",
+		"python	",
+		NULL
+	};
+
 	fp = open_memstream(&buf, &size);
 	ck_assert(fp != NULL);
 
 	head = ptest_list_alloc();
 	ck_assert(print_ptests(head, fp) == 1);
 	ptest_list_free_all(head);
-	ck_assert(strcmp(buf, PRINT_PTESTS_NOT_FOUND) == 0);
+	line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp);
+	ck_assert(line != NULL);
+	ck_assert(strcmp(line, PRINT_PTESTS_NOT_FOUND) == 0);
 
 	head = get_available_ptests(opts_directory);
 	ck_assert(print_ptests(head, fp) == 0);
 	ptest_list_free_all(head);
-	ck_assert(strcmp(buf, PRINT_PTESTS_AVAILABLE) == 0);
+	line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp);
+	ck_assert(line != NULL);
+	ck_assert(strcmp(line, PRINT_PTESTS_AVAILABLE) == 0);
+	i = 0;
+	while ((ptest = expected_ptests[i]) != NULL) {
+		line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp);
+		ck_assert(line != NULL);
+		line[strlen(ptest)] = '\0'; // XXX: Only compare the name part
+		ck_assert(strcmp(line, ptest) == 0);
+		i++;
+	}
 
 	fclose(fp);
 	free(buf);

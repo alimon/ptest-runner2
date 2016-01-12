@@ -156,7 +156,7 @@ print_ptests(struct ptest_list *head, FILE *fp)
 		struct ptest_list *n;
 		fprintf(fp, PRINT_PTESTS_AVAILABLE);
 		PTEST_LIST_ITERATE_START(head, n);
-			printf("%s\t%s\n", n->ptest, n->run_ptest);
+			fprintf(fp, "%s\t%s\n", n->ptest, n->run_ptest);
 		PTEST_LIST_ITERATE_END;
 		return 0;
 	}
