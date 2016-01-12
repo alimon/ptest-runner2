@@ -146,7 +146,7 @@ get_available_ptests(const char *dir)
 	return head;
 }
 
-extern int
+int
 print_ptests(struct ptest_list *head, FILE *fp)
 {
 	if (ptest_list_length(head) <= 0) {
