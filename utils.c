@@ -23,6 +23,7 @@
 #include <stdio.h>
 
 #include <signal.h>
+#include <poll.h>
 #include <fcntl.h>
 #include <time.h>
 #include <dirent.h>
@@ -39,6 +40,8 @@
 #include "utils.h"
 
 #define GET_STIME_BUF_SIZE 1024
+#define WAIT_CHILD_POLL_TIMEOUT_MS 200
+#define WAIT_CHILD_BUF_MAX_SIZE 1024
 
 static inline char *
 get_stime(char *stime, size_t size)
@@ -240,8 +243,8 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 	argv[0] = run_ptest;
 	argv[1] = NULL;
 
-	dup2(STDOUT_FILENO, fd_stdout);
-	dup2(STDERR_FILENO, fd_stderr);
+	dup2(fd_stdout, STDOUT_FILENO);
+	dup2(fd_stderr, STDERR_FILENO);
 	execv(run_ptest, argv);
 
 	exit(0);
@@ -250,48 +253,40 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 static inline int
 wait_child(const char *run_ptest, pid_t pid, int timeout, int *fds, FILE **fps)
 {
-	fd_set rfds;
-	struct timeval tv;
+	struct pollfd pfds[2];
 	time_t sentinel;
 	int r;
 
 	int status;
 	int waitflags;
 
-	tv.tv_sec = 0;
-	tv.tv_usec = 1000; // 1ms
-
-	FD_ZERO(&rfds);
-	FD_SET(fds[0], &rfds);
-	FD_SET(fds[1], &rfds);
+	pfds[0].fd = fds[0];
+	pfds[0].events = POLLIN;
+	pfds[1].fd = fds[1];
+	pfds[1].events = POLLIN;
 
 	sentinel = time(NULL);
-
 	while (1) {
 		waitflags = WNOHANG;
 
-		r = select(2, &rfds, NULL, NULL, &tv);
+		r = poll(pfds, 2, WAIT_CHILD_POLL_TIMEOUT_MS);
 		if (r > 0) {
-			int in = -1, out = -1;
-#define MAX_SIZE 1024
-			char buf[MAX_SIZE];
-			int r;
+			char buf[WAIT_CHILD_BUF_MAX_SIZE];
+			ssize_t n;
 
-			if (FD_ISSET(fds[0], &rfds)) {
-				in = fds[0];
-				out = fileno(fps[0]);
-			} else if (FD_ISSET(fds[1], &rfds)) {
-				in = fds[1];
-				out = fileno(fps[1]);
+			if (pfds[0].revents != 0) {
+				while ((n = read(fds[0], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0)
+					fwrite(buf, n, 1, fps[0]);
 			}
 
-			if (in != -1 && out != -1)
-				while ((r = read(in, buf, MAX_SIZE)) > 0)
-					write(out, buf, r);
+			if (pfds[1].revents != 0) {
+				while ((n = read(fds[1], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0)
+					fwrite(buf, n, 1, fps[1]);
+			}
 
 			sentinel = time(NULL);
 		} else if (timeout >= 0 && ((time(NULL) - sentinel) > timeout)) {
-			fprintf(stderr, "TIMEOUT: %s\n", run_ptest);
+			fprintf(fps[0], "TIMEOUT: %s\n", run_ptest);
 			kill(pid, SIGKILL);
 			waitflags = 0;
 		}
