@@ -1,5 +1,12 @@
-CC=gcc
-CFLAGS=-I . -g -Wall -Werror
+RELEASE=$(shell echo $$RELEASE)
+
+CC=cc
+CFLAGS=-std=gnu99 -pedantic -Wall -Werror -I .
+ifeq ($(RELEASE), 1)
+CFLAGS+= -O2 -DRELEASE
+else
+CFLAGS+= -g
+endif
 LDFLAGS=
 
 BASE_SOURCES=utils.c ptest_list.c
