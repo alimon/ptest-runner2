@@ -253,7 +253,8 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 }
 
 static inline int
-wait_child(const char *run_ptest, pid_t pid, int timeout, int *fds, FILE **fps)
+wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
+		int timeout, int *fds, FILE **fps)
 {
 	struct pollfd pfds[2];
 	time_t sentinel;
@@ -288,7 +289,7 @@ wait_child(const char *run_ptest, pid_t pid, int timeout, int *fds, FILE **fps)
 
 			sentinel = time(NULL);
 		} else if (timeout >= 0 && ((time(NULL) - sentinel) > timeout)) {
-			fprintf(fps[0], "TIMEOUT: %s\n", run_ptest);
+			fprintf(fps[0], "TIMEOUT: %s\n", ptest_dir);
 			kill(pid, SIGKILL);
 			waitflags = 0;
 		}
@@ -326,6 +327,13 @@ run_ptests(struct ptest_list *head, int timeout, const char *progname,
 
 		fprintf(fp, "START: %s\n", progname);
 		PTEST_LIST_ITERATE_START(head, p);
+			char *ptest_dir = strdup(p->run_ptest);
+			if (ptest_dir == NULL) {
+				rc = -1;
+				break;
+			}
+			dirname(ptest_dir);
+
 			child = fork();
 			if (child == -1) {
 				rc = -1;
@@ -338,13 +346,14 @@ run_ptests(struct ptest_list *head, int timeout, const char *progname,
 				FILE *fps[2]; fps[0] = fp; fps[1] = fp_stderr;
 
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
-				fprintf(fp, "BEGIN: %s\n", p->run_ptest);
+				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
-				status = wait_child(p->run_ptest, child, timeout, fds, fps);
+				status = wait_child(ptest_dir, p->run_ptest, child,
+						timeout, fds, fps);
 				if (status)
 					rc += 1;
 
-				fprintf(fp, "END: %s\n", p->run_ptest);
+				fprintf(fp, "END: %s\n", ptest_dir);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
 			}
 		PTEST_LIST_ITERATE_END;
