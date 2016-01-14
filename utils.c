@@ -22,6 +22,7 @@
 #define _GNU_SOURCE 
 #include <stdio.h>
 
+#include <libgen.h>
 #include <signal.h>
 #include <poll.h>
 #include <fcntl.h>
@@ -239,6 +240,7 @@ static inline void
 run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 {
 	char **argv = malloc(sizeof(char) * 2);
+	chdir(dirname(strdup(run_ptest)));
 
 	argv[0] = run_ptest;
 	argv[1] = NULL;
