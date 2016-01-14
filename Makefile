@@ -1,4 +1,5 @@
 RELEASE=$(shell echo $$RELEASE)
+MEMCHECK=$(shell echo $$MEMCHECK)
 
 CC=cc
 CFLAGS=-std=gnu99 -pedantic -Wall -Werror -I .
@@ -6,6 +7,9 @@ ifeq ($(RELEASE), 1)
 CFLAGS+= -O2 -DRELEASE
 else
 CFLAGS+= -g
+endif
+ifeq ($(MEMCHECK), 1)
+CFLAGS+= -DMEMCHECK
 endif
 LDFLAGS=
 

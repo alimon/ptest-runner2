@@ -25,6 +25,14 @@
 #include <stdio.h>
 #include <errno.h>
 
+#ifdef MEMCHECK
+#ifdef RELEASE
+#error "You can't use MEMCHECK when RELEASE is active."
+#endif
+
+#include <mcheck.h>
+#endif
+
 #include "utils.h"
 
 #define DEFAULT_DIRECTORY "/usr/lib"
@@ -51,6 +59,10 @@ main(int argc, char *argv[])
 	int ptest_num = 0;
 	int i;
 	int rc;
+
+#ifdef MEMCHECK
+	mtrace();
+#endif
 
 	struct ptest_list *head, *run;
 
