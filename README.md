@@ -23,7 +23,7 @@ Proposed features:
 ## How to compile?
 
 ```
-$ git clone https://github.com/alimon/ptest-runner2.git
+$ git clone git://git.yoctoproject.org/ptest-runner2
 $ cd ptest-runner2
 $ make
 ```
