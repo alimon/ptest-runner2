@@ -45,6 +45,12 @@ $ ./ptest-runner -d tests/data -t 1
 $ mtrace ./ptest-runner $(MALLOC_TRACE)
 ```
 
+## Contributions
+
+For contribute please send a patch with subject prefix "[ptest-runner]" to 
+yocto@yoctoproject.org and cc the current maintainer that is Aníbal Limón 
+<anibal.limon@linux.intel.com>.
+
 ## Links
 
 [1] http://git.yoctoproject.org/cgit/cgit.cgi/poky/tree/meta/recipes-support/ptest-runner/files/ptest-runner
