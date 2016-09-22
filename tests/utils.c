@@ -37,13 +37,14 @@ extern char *opts_directory;
 
 static char *ptests_found[] = {
 	"bash",
+	"fail",
 	"gcc",
 	"glibc",
 	"hang",
 	"python",
 	NULL
 };
-static int ptests_found_length = 5;
+static int ptests_found_length = 6;
 static char *ptests_not_found[] = {
 	"busybox",
 	"perl",
@@ -170,6 +171,8 @@ START_TEST(test_run_ptests)
 
 	head = get_available_ptests(opts_directory);
 	ptest_list_remove(head, "hang", 1);
+	ptest_list_remove(head, "fail", 1);
+
 	rc = run_ptests(head, timeout, "test_run_ptests", fp_stdout, fp_stderr);
 	ck_assert(rc == 0);
 	ptest_list_free_all(head);
@@ -219,6 +222,32 @@ START_TEST(test_run_timeout_ptest)
 	ptest_list_free_all(head);
 END_TEST
 
+static void
+search_for_fail(const int rp, FILE *fp_stdout, FILE *fp_stderr)
+{
+        const char *fail_str = "ERROR: Exit status is";
+        char line_buf[PRINT_PTEST_BUF_SIZE];
+        int found_fail = 0;
+        char *line = NULL;
+
+        ck_assert(rp != 0);
+
+        while ((line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stdout)) != NULL) {
+		find_word(&found_fail, line, fail_str);
+        }
+
+        ck_assert(found_fail == 1);
+}
+
+START_TEST(test_run_fail_ptest)
+	struct ptest_list *head = get_available_ptests(opts_directory);
+	int timeout = 1;
+
+	test_ptest_expected_failure(head, timeout, "fail", search_for_fail);
+
+	ptest_list_free_all(head);
+END_TEST
+
 Suite *
 utils_suite()
 {
@@ -233,6 +262,7 @@ utils_suite()
 	tcase_add_test(tc_core, test_filter_ptests);
 	tcase_add_test(tc_core, test_run_ptests);
 	tcase_add_test(tc_core, test_run_timeout_ptest);
+	tcase_add_test(tc_core, test_run_fail_ptest);
 
 	suite_add_tcase(s, tc_core);
 
