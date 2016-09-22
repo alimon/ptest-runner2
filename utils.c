@@ -249,7 +249,7 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 	dup2(fd_stderr, STDERR_FILENO);
 	execv(run_ptest, argv);
 
-	exit(0);
+	exit(1);
 }
 
 static inline int
@@ -336,6 +336,7 @@ run_ptests(struct ptest_list *head, int timeout, const char *progname,
 
 			child = fork();
 			if (child == -1) {
+				fprintf(fp, "ERROR: Fork %s\n", strerror(errno));
 				rc = -1;
 				break;
 			} else if (child == 0) {
@@ -350,9 +351,10 @@ run_ptests(struct ptest_list *head, int timeout, const char *progname,
 
 				status = wait_child(ptest_dir, p->run_ptest, child,
 						timeout, fds, fps);
-				if (status)
+				if (status) {
+					fprintf(fp, "ERROR: Exit status is %d\n", status);
 					rc += 1;
-
+				}
 				fprintf(fp, "END: %s\n", ptest_dir);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
 			}
