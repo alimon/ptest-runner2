@@ -50,6 +50,21 @@ static char *ptests_not_found[] = {
 	NULL,
 };
 
+static inline void
+find_word(int *found, const char *line, const char *word)
+{
+
+	char *pivot = NULL;
+
+	pivot = strdup(line);
+	pivot[strlen(word)] = '\0';
+	if (strcmp(pivot, word) == 0) { *found = 1; }
+	free(pivot);
+}
+
+static void test_ptest_expected_failure(struct ptest_list *, const int, char *,
+	void (*h_analizer)(const int, FILE *, FILE *));
+
 START_TEST(test_get_available_ptests)
 {
 	struct ptest_list *head = get_available_ptests(opts_directory);
@@ -148,13 +163,6 @@ START_TEST(test_run_ptests)
 	size_t size_stderr = PRINT_PTEST_BUF_SIZE;
 	FILE *fp_stderr;
 
-	int found_timeout = 0;
-	int next = 0;
-	const char *ptest_hang = "hang";
-	const char *timeout_str = "TIMEOUT";
-	char *line;
-	char line_buf[PRINT_PTEST_BUF_SIZE];
-
 	fp_stdout = open_memstream(&buf_stdout, &size_stdout);
 	ck_assert(fp_stdout != NULL);
 	fp_stderr = open_memstream(&buf_stderr, &size_stderr);
@@ -166,35 +174,49 @@ START_TEST(test_run_ptests)
 	ck_assert(rc == 0);
 	ptest_list_free_all(head);
 
-	head = get_available_ptests(opts_directory);
-	rc = run_ptests(head, timeout, "test_run_ptests", fp_stdout, fp_stderr);
-
-	/* Search for TIMEOUT keyword in output of hang ptest */
-	while ((line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stdout)) != NULL) {
-		if (next) {
-			line[strlen(timeout_str)] = '\0'; 
-			if (strcmp(line, timeout_str) == 0)
-				found_timeout = 1;
-		} else {
-			line[strlen(ptest_hang)] = '\0'; // XXX: Only compare the name part
-			if (strcmp(line, ptest_hang) == 0)
-				next = 1;
-		}
-	}
-	ck_assert(found_timeout == 1);
-
-	/* Test stderr output */
-	line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stderr);
-	line[strlen(ptest_hang)] = '\0';
-	ck_assert(strcmp(line, ptest_hang) == 0);
-
-	ck_assert(rc != 0);
-	ptest_list_free_all(head);
-
 	fclose(fp_stdout);
 	free(buf_stdout);
 	fclose(fp_stderr);
 	free(buf_stderr);
+END_TEST
+
+static void
+search_for_timeout(const int rp, FILE *fp_stdout, FILE *fp_stderr)
+{
+        const char *ptest_hang = "hang";
+        const char *timeout_str = "TIMEOUT";
+        char line_buf[PRINT_PTEST_BUF_SIZE];
+	int found_hang = 0;
+	int found_timeout = 0;
+	int next = 0;
+	char *line = NULL;
+
+	ck_assert(rp != 0);
+
+	while ((line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stdout)) != NULL) {
+		if (next) {
+                        find_word(&found_timeout, line, timeout_str);
+                } else {
+                        find_word(&next, line, ptest_hang); // XXX: Only compare the name part
+                }
+	}
+
+	ck_assert(found_timeout == 1);
+
+        /* Test stderr output */
+        line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stderr);
+        find_word(&found_hang, line, ptest_hang);
+
+	ck_assert(found_hang == 1);
+}
+
+START_TEST(test_run_timeout_ptest)
+	struct ptest_list *head = get_available_ptests(opts_directory);
+	int timeout = 1;
+
+	test_ptest_expected_failure(head, timeout, "hang", search_for_timeout);
+
+	ptest_list_free_all(head);
 END_TEST
 
 Suite *
@@ -210,8 +232,43 @@ utils_suite()
 	tcase_add_test(tc_core, test_print_ptests);
 	tcase_add_test(tc_core, test_filter_ptests);
 	tcase_add_test(tc_core, test_run_ptests);
+	tcase_add_test(tc_core, test_run_timeout_ptest);
 
 	suite_add_tcase(s, tc_core);
 
 	return s;
+}
+
+static void
+test_ptest_expected_failure(struct ptest_list *head, const int timeout, char *progname,
+		void (*h_analizer)(const int, FILE *, FILE *))
+{
+	char *buf_stdout;
+	size_t size_stdout = PRINT_PTEST_BUF_SIZE;
+	FILE *fp_stdout;
+	char *buf_stderr;
+	size_t size_stderr = PRINT_PTEST_BUF_SIZE;
+	FILE *fp_stderr;
+
+	fp_stdout = open_memstream(&buf_stdout, &size_stdout);
+	ck_assert(fp_stdout != NULL);
+	fp_stderr = open_memstream(&buf_stderr, &size_stderr);
+	ck_assert(fp_stderr != NULL);
+
+	{
+		struct ptest_list *filtered = filter_ptests(head, &progname, 1);
+		ck_assert(ptest_list_length(filtered) == 1);
+
+		h_analizer(
+			run_ptests(filtered, timeout, progname, fp_stdout, fp_stderr),
+			fp_stdout, fp_stderr
+		);
+
+		PTEST_LIST_FREE_ALL_CLEAN(filtered);
+	}
+
+	fclose(fp_stdout);
+	free(buf_stdout);
+	fclose(fp_stderr);
+	free(buf_stderr);
 }
