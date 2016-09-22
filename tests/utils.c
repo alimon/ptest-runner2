@@ -186,31 +186,17 @@ END_TEST
 static void
 search_for_timeout(const int rp, FILE *fp_stdout, FILE *fp_stderr)
 {
-        const char *ptest_hang = "hang";
-        const char *timeout_str = "TIMEOUT";
-        char line_buf[PRINT_PTEST_BUF_SIZE];
-	int found_hang = 0;
+	const char *timeout_str = "TIMEOUT";
+	char line_buf[PRINT_PTEST_BUF_SIZE];
 	int found_timeout = 0;
-	int next = 0;
 	char *line = NULL;
 
 	ck_assert(rp != 0);
 
-	while ((line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stdout)) != NULL) {
-		if (next) {
-                        find_word(&found_timeout, line, timeout_str);
-                } else {
-                        find_word(&next, line, ptest_hang); // XXX: Only compare the name part
-                }
-	}
+	while ((line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stdout)) != NULL)
+		find_word(&found_timeout, line, timeout_str);
 
 	ck_assert(found_timeout == 1);
-
-        /* Test stderr output */
-        line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stderr);
-        find_word(&found_hang, line, ptest_hang);
-
-	ck_assert(found_hang == 1);
 }
 
 START_TEST(test_run_timeout_ptest)
