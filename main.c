@@ -41,8 +41,8 @@
 static inline void
 print_usage(FILE *stream, char *progname)
 {
-	fprintf(stream, "Usage: %s [-d directory] [-l list] [-t timeout] "
-			"[-h] [ptest1 ptest2 ...]\n", progname);
+	fprintf(stream, "Usage: %s [-d directory] [-l list] [-t timeout] [-x xml-filename]"
+			" [-h] [ptest1 ptest2 ...]\n", progname);
 }
 
 int
@@ -64,8 +64,9 @@ main(int argc, char *argv[])
 	opts.list = 0;
 	opts.timeout = DEFAULT_TIMEOUT;
 	opts.ptests = NULL;
+	opts.xml_filename = NULL;
 
-	while ((opt = getopt(argc, argv, "d:lt:h")) != -1) {
+	while ((opt = getopt(argc, argv, "d:ltx:h")) != -1) {
 		switch (opt) {
 			case 'd':
 				free(opts.directory);
@@ -81,6 +82,11 @@ main(int argc, char *argv[])
 			case 'h':
 				print_usage(stdout, argv[0]);
 				exit(0);
+			break;
+			case 'x':
+				free(opts.xml_filename);
+				opts.xml_filename = strdup(optarg);
+				CHECK_ALLOCATION(opts.xml_filename, 1, 1);
 			break;
 			default:
 				print_usage(stdout, argv[0]);
@@ -125,7 +131,7 @@ main(int argc, char *argv[])
 		run = filter_ptests(head, opts.ptests, ptest_num);
 		CHECK_ALLOCATION(run, ptest_num, 1);
 		ptest_list_free_all(head);
-	} 
+	}
 
 	rc = run_ptests(run, opts, argv[0], stdout, stderr);
 

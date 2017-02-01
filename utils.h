@@ -35,7 +35,9 @@ struct ptest_options {
 	int list;
 	int timeout;
 	char **ptests;
+	char *xml_filename;
 };
+
 
 extern void check_allocation1(void *, size_t, char *, int, int);
 extern struct ptest_list *get_available_ptests(const char *);
@@ -43,5 +45,9 @@ extern int print_ptests(struct ptest_list *, FILE *);
 extern struct ptest_list *filter_ptests(struct ptest_list *, char **, int);
 extern int run_ptests(struct ptest_list *, const struct ptest_options,
 		const char *, FILE *, FILE *);
+
+extern FILE *xml_create(int, char *);
+extern void xml_add_case(FILE *, int, const char *);
+extern void xml_finish(FILE *);
 
 #endif

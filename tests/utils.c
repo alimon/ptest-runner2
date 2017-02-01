@@ -237,6 +237,46 @@ START_TEST(test_run_fail_ptest)
 	ptest_list_free_all(head);
 END_TEST
 
+static int
+filecmp(FILE *fp1, FILE *fp2)
+{
+    char f1, f2;
+    while (1) {
+			  int end = 0;
+        if ((f1 = getc(fp1)) == EOF) end++;
+        if ((f2 = getc(fp2)) == EOF) end++;
+
+				if (end == 2) return 0;
+				if (end == 1) return 1;
+        if (f1 != f2) return 2;
+    }
+}
+
+START_TEST(test_xml_pass)
+	FILE *xp;
+	xp = xml_create(2, "./test.xml");
+	ck_assert(xp != NULL);
+	xml_add_case(xp, 0,"test1");
+	xml_add_case(xp, 1,"test2");
+	xml_finish(xp);
+
+	FILE *fp, *fr;
+	fr = fopen("./tests/data/reference.xml", "r");
+	ck_assert(fr != NULL);
+	fp = fopen("./test.xml", "r");
+	ck_assert(fp != NULL);
+
+	ck_assert(filecmp(fr, fp) == 0);
+
+	fclose(fr);
+	fclose(fp);
+	unlink("./test.xml");
+END_TEST
+
+START_TEST(test_xml_fail)
+	ck_assert(xml_create(2, "./") == NULL);
+END_TEST
+
 Suite *
 utils_suite()
 {
@@ -252,6 +292,8 @@ utils_suite()
 	tcase_add_test(tc_core, test_run_ptests);
 	tcase_add_test(tc_core, test_run_timeout_ptest);
 	tcase_add_test(tc_core, test_run_fail_ptest);
+	tcase_add_test(tc_core, test_xml_pass);
+	tcase_add_test(tc_core, test_xml_fail);
 
 	suite_add_tcase(s, tc_core);
 

@@ -14,6 +14,7 @@ Now the ptest-runner2 support the next features:
 - List available ptests.
 - Specify the timeout for avoid blocking indefinetly.
 - Only run certain ptests.
+- XML-ouput
 
 Proposed features:
 

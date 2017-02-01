@@ -313,6 +313,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 		const char *progname, FILE *fp, FILE *fp_stderr)
 {
 	int rc = 0;
+	FILE *xh;
 
 	struct ptest_list *p;
 	char stime[GET_STIME_BUF_SIZE];
@@ -320,6 +321,12 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	pid_t child;
 	int pipefd_stdout[2];
 	int pipefd_stderr[2];
+
+	if (opts.xml_filename) {
+		xh = xml_create(ptest_list_length(head), opts.xml_filename);
+		if (!xh)
+			exit(EXIT_FAILURE);
+	}
 
 	do
 	{
@@ -361,6 +368,9 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				if (status)
 					rc += 1;
 
+				if (opts.xml_filename)
+					xml_add_case(xh, status, ptest_dir);
+
 				fprintf(fp, "END: %s\n", ptest_dir);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
 			}
@@ -374,5 +384,46 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	if (rc == -1) 
 		fprintf(fp_stderr, "run_ptests fails: %s", strerror(errno));
 
+	if (opts.xml_filename)
+		xml_finish(xh);
+
 	return rc;
+}
+
+FILE *
+xml_create(int test_count, char *xml_filename)
+{
+	FILE *xh;
+
+	if ((xh = fopen(xml_filename, "w"))) {
+		fprintf(xh, "<?xml version='1.0' encoding='UTF-8'?>\n");
+		fprintf(xh, "<testsuite name='ptest' tests='%d'>\n", test_count);
+	} else {
+		fprintf(stderr, "XML File could not be created. %s.\n",
+				strerror(errno));
+		return NULL;
+	}
+
+	return xh;
+}
+
+void
+xml_add_case(FILE *xh, int status, const char *ptest_dir)
+{
+	fprintf(xh, "\t<testcase classname='%s' name='run-ptest'>\n", ptest_dir);
+
+	if (status != 0) {
+		fprintf(xh, "\t\t<failure type='exit_code'");
+		fprintf(xh, " message='run-ptest exited with code: %d'>", status);
+		fprintf(xh, "</failure>\n");
+	}
+
+	fprintf(xh, "\t</testcase>\n");
+}
+
+void
+xml_finish(FILE *xh)
+{
+	fprintf(xh, "</testsuite>\n");
+	fclose(xh);
 }

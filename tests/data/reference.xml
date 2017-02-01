@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuite name='ptest' tests='2'>
+	<testcase classname='test1' name='run-ptest'>
+	</testcase>
+	<testcase classname='test2' name='run-ptest'>
+		<failure type='exit_code' message='run-ptest exited with code: 1'></failure>
+	</testcase>
+</testsuite>
