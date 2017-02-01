@@ -45,13 +45,6 @@ print_usage(FILE *stream, char *progname)
 			"[-h] [ptest1 ptest2 ...]\n", progname);
 }
 
-static struct {
-	char *directory;
-	int list;
-	int timeout;
-	char **ptests;
-} opts;
-
 int
 main(int argc, char *argv[])
 {
@@ -65,6 +58,7 @@ main(int argc, char *argv[])
 #endif
 
 	struct ptest_list *head, *run;
+	struct ptest_options opts;
 
 	opts.directory = strdup(DEFAULT_DIRECTORY);
 	opts.list = 0;
@@ -133,7 +127,7 @@ main(int argc, char *argv[])
 		ptest_list_free_all(head);
 	} 
 
-	rc = run_ptests(run, opts.timeout, argv[0], stdout, stderr);
+	rc = run_ptests(run, opts, argv[0], stdout, stderr);
 
 	ptest_list_free_all(run);
 

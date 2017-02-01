@@ -309,8 +309,8 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 }
 
 int
-run_ptests(struct ptest_list *head, int timeout, const char *progname,
-		FILE *fp, FILE *fp_stderr)
+run_ptests(struct ptest_list *head, const struct ptest_options opts,
+		const char *progname, FILE *fp, FILE *fp_stderr)
 {
 	int rc = 0;
 
@@ -357,7 +357,7 @@ run_ptests(struct ptest_list *head, int timeout, const char *progname,
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
 				status = wait_child(ptest_dir, p->run_ptest, child,
-						timeout, fds, fps);
+						opts.timeout, fds, fps);
 				if (status)
 					rc += 1;
 

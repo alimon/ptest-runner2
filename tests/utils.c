@@ -51,6 +51,8 @@ static char *ptests_not_found[] = {
 	NULL,
 };
 
+static struct ptest_options EmptyOpts;
+
 static inline void
 find_word(int *found, const char *line, const char *word)
 {
@@ -153,8 +155,9 @@ START_TEST(test_filter_ptests)
 END_TEST
 
 START_TEST(test_run_ptests)
-	struct ptest_list *head; 
-	int timeout = 1;
+	struct ptest_list *head;
+	struct ptest_options opts = EmptyOpts;
+	opts.timeout = 1;
 	int rc;
 
 	char *buf_stdout;
@@ -173,7 +176,7 @@ START_TEST(test_run_ptests)
 	ptest_list_remove(head, "hang", 1);
 	ptest_list_remove(head, "fail", 1);
 
-	rc = run_ptests(head, timeout, "test_run_ptests", fp_stdout, fp_stderr);
+	rc = run_ptests(head, opts, "test_run_ptests", fp_stdout, fp_stderr);
 	ck_assert(rc == 0);
 	ptest_list_free_all(head);
 
@@ -275,8 +278,11 @@ test_ptest_expected_failure(struct ptest_list *head, const int timeout, char *pr
 		struct ptest_list *filtered = filter_ptests(head, &progname, 1);
 		ck_assert(ptest_list_length(filtered) == 1);
 
+		struct ptest_options opts = EmptyOpts;
+		opts.timeout = timeout;
+
 		h_analizer(
-			run_ptests(filtered, timeout, progname, fp_stdout, fp_stderr),
+			run_ptests(filtered, opts, progname, fp_stdout, fp_stderr),
 			fp_stdout, fp_stderr
 		);
 
