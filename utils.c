@@ -260,6 +260,7 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 	time_t sentinel;
 	int r;
 
+	int timeouted = 0;
 	int status;
 	int waitflags;
 
@@ -289,13 +290,19 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 
 			sentinel = time(NULL);
 		} else if (timeout >= 0 && ((time(NULL) - sentinel) > timeout)) {
-			fprintf(fps[0], "TIMEOUT: %s\n", ptest_dir);
+			timeouted = 1;
 			kill(pid, SIGKILL);
 			waitflags = 0;
 		}
 
 		if (waitpid(pid, &status, waitflags) == pid)
 			break;
+	}
+
+	if (status) {
+		fprintf(fps[0], "\nERROR: Exit status is %d\n", status);
+		if (timeouted)
+			fprintf(fps[0], "TIMEOUT: %s\n", ptest_dir);
 	}
 
 	return status;
@@ -351,10 +358,9 @@ run_ptests(struct ptest_list *head, int timeout, const char *progname,
 
 				status = wait_child(ptest_dir, p->run_ptest, child,
 						timeout, fds, fps);
-				if (status) {
-					fprintf(fp, "ERROR: Exit status is %d\n", status);
+				if (status)
 					rc += 1;
-				}
+
 				fprintf(fp, "END: %s\n", ptest_dir);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
 			}
