@@ -66,7 +66,7 @@ main(int argc, char *argv[])
 	opts.ptests = NULL;
 	opts.xml_filename = NULL;
 
-	while ((opt = getopt(argc, argv, "d:ltx:h")) != -1) {
+	while ((opt = getopt(argc, argv, "d:lt:x:h")) != -1) {
 		switch (opt) {
 			case 'd':
 				free(opts.directory);
