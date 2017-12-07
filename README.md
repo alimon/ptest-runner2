@@ -50,7 +50,7 @@ $ mtrace ./ptest-runner $(MALLOC_TRACE)
 
 For contribute please send a patch with subject prefix "[ptest-runner]" to 
 yocto@yoctoproject.org and cc the current maintainer that is Aníbal Limón 
-<anibal.limon@linux.intel.com>.
+<anibal.limon@linaro.org>.
 
 ## Links
 
