@@ -22,7 +22,7 @@ TEST_SOURCES=tests/main.c tests/ptest_list.c tests/utils.c $(BASE_SOURCES)
 TEST_OBJECTS=$(TEST_SOURCES:.c=.o)
 TEST_EXECUTABLE=ptest-runner-test
 TEST_LDFLAGS=-lm -lrt -lpthread
-TEST_LIBSTATIC=-lcheck
+TEST_LIBSTATIC=-lcheck -lsubunit
 
 TEST_DATA=$(shell echo `pwd`/tests/data)
 
