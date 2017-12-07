@@ -48,6 +48,7 @@ static int ptests_found_length = 6;
 static char *ptests_not_found[] = {
 	"busybox",
 	"perl",
+	"python3",
 	NULL,
 };
 

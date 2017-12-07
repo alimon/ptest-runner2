@@ -143,6 +143,12 @@ get_available_ptests(const char *dir)
 				continue;
 			}
 
+			if (ptest_list_search_by_file(head, run_ptest, st_buf)) {
+				free(run_ptest);
+				free(d_name);
+				continue;
+			}
+
 			struct ptest_list *p = ptest_list_add(head,
 				d_name, run_ptest);
 			CHECK_ALLOCATION(p, sizeof(struct ptest_list *), 0);

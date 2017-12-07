@@ -110,6 +110,46 @@ ptest_list_search(struct ptest_list *head, char *ptest)
 	return q;
 }
 
+
+struct ptest_list *
+ptest_list_search_by_file(struct ptest_list *head, char *run_ptest, struct stat st_buf)
+{
+	struct ptest_list *q = NULL;
+	struct ptest_list *p;
+	struct stat st_buf_p;
+
+	VALIDATE_PTR_RNULL(head);
+	VALIDATE_PTR_RNULL(run_ptest);
+
+	for (p = head; p != NULL; p = p->next) {
+		if (p->ptest == NULL) 
+			continue;
+
+		if (stat(p->run_ptest, &st_buf_p) == -1)
+			continue;
+
+		if (strcmp(p->run_ptest, run_ptest) == 0) {
+			q = p;
+			break;
+		}
+
+		/* *
+		 * In some ptest packages exists symlink in the ptest directory
+		 * causing to load/run twice the same ptest, 
+		 *
+		 * For example in perl5:
+		 * /usr/lib/perl -> /usr/lib/perl5
+		 * */
+		if (st_buf.st_dev == st_buf_p.st_dev &&
+		    st_buf.st_ino == st_buf_p.st_ino) {
+			q = p;
+			break;
+		}
+	}
+
+	return q;
+}
+
 struct ptest_list *
 ptest_list_add(struct ptest_list *head, char *ptest, char *run_ptest)
 {
