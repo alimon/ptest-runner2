@@ -32,6 +32,7 @@
 
 struct ptest_options {
 	char *directory;
+	char **exclude;
 	int list;
 	int timeout;
 	char **ptests;

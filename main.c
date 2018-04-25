@@ -19,6 +19,7 @@
  * 	Aníbal Limón <anibal.limon@intel.com>
  */
 
+#include <ctype.h>
 #include <limits.h>
 #include <unistd.h>
 #include <string.h>
@@ -42,8 +43,8 @@
 static inline void
 print_usage(FILE *stream, char *progname)
 {
-	fprintf(stream, "Usage: %s [-d directory] [-l list] [-t timeout] [-x xml-filename]"
-			" [-h] [ptest1 ptest2 ...]\n", progname);
+	fprintf(stream, "Usage: %s [-d directory] [-e exclude] [-l list] [-t timeout]"
+			" [-x xml-filename] [-h] [ptest1 ptest2 ...]\n", progname);
 }
 
 int
@@ -53,6 +54,8 @@ main(int argc, char *argv[])
 	int ptest_num = 0;
 	int i;
 	int rc;
+	int ptest_exclude_num = 0;
+	char *c, *tok;
 
 #ifdef MEMCHECK
 	mtrace();
@@ -62,17 +65,43 @@ main(int argc, char *argv[])
 	struct ptest_options opts;
 
 	opts.directory = strdup(DEFAULT_DIRECTORY);
+	opts.exclude = NULL;
 	opts.list = 0;
 	opts.timeout = DEFAULT_TIMEOUT;
 	opts.ptests = NULL;
 	opts.xml_filename = NULL;
 
-	while ((opt = getopt(argc, argv, "d:lt:x:h")) != -1) {
+	while ((opt = getopt(argc, argv, "d:e:lt:x:h")) != -1) {
 		switch (opt) {
 			case 'd':
 				free(opts.directory);
 				opts.directory = realpath(optarg, NULL);
 				CHECK_ALLOCATION(opts.directory, 1, 1);
+			break;
+			case 'e':
+				c = optarg;
+				ptest_exclude_num = 1;
+
+				while (*c) {
+					if (isspace(*c))
+						ptest_exclude_num++;
+					c++;
+				}
+
+
+				opts.exclude = malloc(ptest_exclude_num * sizeof(char));
+				CHECK_ALLOCATION(opts.exclude, 1, 1);
+
+				i = 0;
+				tok = strtok_r(optarg, " ", &c);
+				opts.exclude[i] = strdup(tok);
+				CHECK_ALLOCATION(opts.exclude[i], 1, 1);
+				i++;
+				while ((tok = strtok_r(NULL, " ", &c)) != NULL) {
+					opts.exclude[i] = strdup(tok);
+					CHECK_ALLOCATION(opts.exclude[i], 1, 1);
+					i++;
+				}
 			break;
 			case 'l':
 				opts.list = 1;
@@ -133,6 +162,9 @@ main(int argc, char *argv[])
 		CHECK_ALLOCATION(run, ptest_num, 1);
 		ptest_list_free_all(head);
 	}
+
+	for (i = 0; i < ptest_exclude_num; i++)
+		ptest_list_remove(run, opts.exclude[i], 1);
 
 	rc = run_ptests(run, opts, argv[0], stdout, stderr);
 
