@@ -19,6 +19,7 @@
  * 	Aníbal Limón <anibal.limon@intel.com>
  */
 
+#include <limits.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
@@ -70,7 +71,7 @@ main(int argc, char *argv[])
 		switch (opt) {
 			case 'd':
 				free(opts.directory);
-				opts.directory = strdup(optarg);
+				opts.directory = realpath(optarg, NULL);
 				CHECK_ALLOCATION(opts.directory, 1, 1);
 			break;
 			case 'l':
