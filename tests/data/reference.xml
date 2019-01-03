@@ -4,5 +4,6 @@
 	</testcase>
 	<testcase classname='test2' name='run-ptest'>
 		<failure type='exit_code' message='run-ptest exited with code: 1'></failure>
+		<failure type='timeout'/>
 	</testcase>
 </testsuite>

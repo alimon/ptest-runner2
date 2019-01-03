@@ -260,14 +260,13 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 
 static inline int
 wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
-		int timeout, int *fds, FILE **fps)
+		int timeout, int *fds, FILE **fps, int *timeouted)
 {
 	struct pollfd pfds[2];
 	struct timespec sentinel;
 	clockid_t clock = CLOCK_MONOTONIC;
 	int r;
 
-	int timeouted = 0;
 	int status;
 	int waitflags;
 
@@ -280,6 +279,8 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 		clock = CLOCK_REALTIME;
 		clock_gettime(clock, &sentinel);
 	}
+
+	*timeouted = 0;
 
 	while (1) {
 		waitflags = WNOHANG;
@@ -305,7 +306,7 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 
 			clock_gettime(clock, &time);
 			if ((time.tv_sec - sentinel.tv_sec) > timeout) {
-				timeouted = 1;
+				*timeouted = 1;
 				kill(pid, SIGKILL);
 				waitflags = 0;
 			}
@@ -315,11 +316,6 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 			break;
 	}
 
-	if (status) {
-		fprintf(fps[0], "\nERROR: Exit status is %d\n", status);
-		if (timeouted)
-			fprintf(fps[0], "TIMEOUT: %s\n", ptest_dir);
-	}
 
 	return status;
 }
@@ -337,6 +333,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	pid_t child;
 	int pipefd_stdout[2];
 	int pipefd_stderr[2];
+	int timeouted;
 
 	if (opts.xml_filename) {
 		xh = xml_create(ptest_list_length(head), opts.xml_filename);
@@ -380,12 +377,17 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
 				status = wait_child(ptest_dir, p->run_ptest, child,
-						opts.timeout, fds, fps);
-				if (status)
+						opts.timeout, fds, fps, &timeouted);
+
+				if (status) {
+					fprintf(fps[0], "\nERROR: Exit status is %d\n", status);
 					rc += 1;
+				}
+				if (timeouted)
+					fprintf(fps[0], "TIMEOUT: %s\n", ptest_dir);
 
 				if (opts.xml_filename)
-					xml_add_case(xh, status, ptest_dir);
+					xml_add_case(xh, status, ptest_dir, timeouted);
 
 				fprintf(fp, "END: %s\n", ptest_dir);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
@@ -424,7 +426,7 @@ xml_create(int test_count, char *xml_filename)
 }
 
 void
-xml_add_case(FILE *xh, int status, const char *ptest_dir)
+xml_add_case(FILE *xh, int status, const char *ptest_dir, int timeouted)
 {
 	fprintf(xh, "\t<testcase classname='%s' name='run-ptest'>\n", ptest_dir);
 
@@ -433,6 +435,8 @@ xml_add_case(FILE *xh, int status, const char *ptest_dir)
 		fprintf(xh, " message='run-ptest exited with code: %d'>", status);
 		fprintf(xh, "</failure>\n");
 	}
+	if (timeouted)
+		fprintf(xh, "\t\t<failure type='timeout'/>\n");
 
 	fprintf(xh, "\t</testcase>\n");
 }

@@ -257,8 +257,8 @@ START_TEST(test_xml_pass)
 	FILE *xp;
 	xp = xml_create(2, "./test.xml");
 	ck_assert(xp != NULL);
-	xml_add_case(xp, 0,"test1");
-	xml_add_case(xp, 1,"test2");
+	xml_add_case(xp, 0,"test1", 0);
+	xml_add_case(xp, 1,"test2", 1);
 	xml_finish(xp);
 
 	FILE *fp, *fr;
