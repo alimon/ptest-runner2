@@ -48,7 +48,7 @@ extern int run_ptests(struct ptest_list *, const struct ptest_options,
 		const char *, FILE *, FILE *);
 
 extern FILE *xml_create(int, char *);
-extern void xml_add_case(FILE *, int, const char *, int);
+extern void xml_add_case(FILE *, int, const char *, int, int);
 extern void xml_finish(FILE *);
 
 #endif

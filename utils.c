@@ -45,12 +45,10 @@
 #define WAIT_CHILD_BUF_MAX_SIZE 1024
 
 static inline char *
-get_stime(char *stime, size_t size)
+get_stime(char *stime, size_t size, time_t t)
 {
-	time_t t;
 	struct tm *lt;
 
-	t = time(NULL);
 	lt = localtime(&t);
 	strftime(stime, size, "%Y-%m-%dT%H:%M", lt);
 
@@ -334,6 +332,8 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	int pipefd_stdout[2];
 	int pipefd_stderr[2];
 	int timeouted;
+	time_t sttime, entime;
+	int duration;
 
 	if (opts.xml_filename) {
 		xh = xml_create(ptest_list_length(head), opts.xml_filename);
@@ -373,11 +373,15 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				int fds[2]; fds[0] = pipefd_stdout[0]; fds[1] = pipefd_stderr[0];
 				FILE *fps[2]; fps[0] = fp; fps[1] = fp_stderr;
 
-				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
+				sttime = time(NULL);
+				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, sttime));
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
 				status = wait_child(ptest_dir, p->run_ptest, child,
 						opts.timeout, fds, fps, &timeouted);
+				entime = time(NULL);
+				duration = entime - sttime;
+				fprintf(fps[0], "DURATION: %d\n", duration);
 
 				if (status) {
 					fprintf(fps[0], "\nERROR: Exit status is %d\n", status);
@@ -387,10 +391,10 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 					fprintf(fps[0], "TIMEOUT: %s\n", ptest_dir);
 
 				if (opts.xml_filename)
-					xml_add_case(xh, status, ptest_dir, timeouted);
+					xml_add_case(xh, status, ptest_dir, timeouted, duration);
 
 				fprintf(fp, "END: %s\n", ptest_dir);
-				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE));
+				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, entime));
 			}
 		PTEST_LIST_ITERATE_END;
 		fprintf(fp, "STOP: %s\n", progname);
@@ -426,9 +430,10 @@ xml_create(int test_count, char *xml_filename)
 }
 
 void
-xml_add_case(FILE *xh, int status, const char *ptest_dir, int timeouted)
+xml_add_case(FILE *xh, int status, const char *ptest_dir, int timeouted, int duration)
 {
 	fprintf(xh, "\t<testcase classname='%s' name='run-ptest'>\n", ptest_dir);
+	fprintf(xh, "\t\t<duration>%d</duration>\n", duration);
 
 	if (status != 0) {
 		fprintf(xh, "\t\t<failure type='exit_code'");

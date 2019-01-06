@@ -188,26 +188,30 @@ START_TEST(test_run_ptests)
 END_TEST
 
 static void
-search_for_timeout(const int rp, FILE *fp_stdout, FILE *fp_stderr)
+search_for_timeout_and_duration(const int rp, FILE *fp_stdout, FILE *fp_stderr)
 {
 	const char *timeout_str = "TIMEOUT";
+	const char *duration_str = "DURATION";
 	char line_buf[PRINT_PTEST_BUF_SIZE];
-	int found_timeout = 0;
+	int found_timeout = 0, found_duration = 0;
 	char *line = NULL;
 
 	ck_assert(rp != 0);
 
-	while ((line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stdout)) != NULL)
+	while ((line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stdout)) != NULL) {
 		find_word(&found_timeout, line, timeout_str);
+		find_word(&found_duration, line, duration_str);
+	}
 
 	ck_assert(found_timeout == 1);
+	ck_assert(found_duration == 1);
 }
 
-START_TEST(test_run_timeout_ptest)
+START_TEST(test_run_timeout_duration_ptest)
 	struct ptest_list *head = get_available_ptests(opts_directory);
 	int timeout = 1;
 
-	test_ptest_expected_failure(head, timeout, "hang", search_for_timeout);
+	test_ptest_expected_failure(head, timeout, "hang", search_for_timeout_and_duration);
 
 	ptest_list_free_all(head);
 END_TEST
@@ -257,8 +261,8 @@ START_TEST(test_xml_pass)
 	FILE *xp;
 	xp = xml_create(2, "./test.xml");
 	ck_assert(xp != NULL);
-	xml_add_case(xp, 0,"test1", 0);
-	xml_add_case(xp, 1,"test2", 1);
+	xml_add_case(xp, 0,"test1", 0, 5);
+	xml_add_case(xp, 1,"test2", 1, 10);
 	xml_finish(xp);
 
 	FILE *fp, *fr;
@@ -291,7 +295,7 @@ utils_suite()
 	tcase_add_test(tc_core, test_print_ptests);
 	tcase_add_test(tc_core, test_filter_ptests);
 	tcase_add_test(tc_core, test_run_ptests);
-	tcase_add_test(tc_core, test_run_timeout_ptest);
+	tcase_add_test(tc_core, test_run_timeout_duration_ptest);
 	tcase_add_test(tc_core, test_run_fail_ptest);
 	tcase_add_test(tc_core, test_xml_pass);
 	tcase_add_test(tc_core, test_xml_fail);
