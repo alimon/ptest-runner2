@@ -37,7 +37,9 @@
 
 #include "utils.h"
 
+#ifndef DEFAULT_DIRECTORY
 #define DEFAULT_DIRECTORY "/usr/lib"
+#endif
 #define DEFAULT_TIMEOUT 300
 
 static inline void
