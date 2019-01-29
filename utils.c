@@ -250,7 +250,8 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 	argv[1] = NULL;
 
 	dup2(fd_stdout, STDOUT_FILENO);
-	dup2(fd_stderr, STDERR_FILENO);
+	// XXX: Redirect stderr to stdout to avoid buffer ordering problems.
+	dup2(fd_stdout, STDERR_FILENO);
 	execv(run_ptest, argv);
 
 	exit(1);
