@@ -382,12 +382,12 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 						opts.timeout, fds, fps, &timeouted);
 				entime = time(NULL);
 				duration = entime - sttime;
-				fprintf(fps[0], "DURATION: %d\n", duration);
 
 				if (status) {
 					fprintf(fps[0], "\nERROR: Exit status is %d\n", status);
 					rc += 1;
 				}
+				fprintf(fps[0], "DURATION: %d\n", duration);
 				if (timeouted)
 					fprintf(fps[0], "TIMEOUT: %s\n", ptest_dir);
 
