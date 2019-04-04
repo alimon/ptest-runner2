@@ -285,6 +285,7 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 	struct pollfd pfds[2];
 	struct timespec sentinel;
 	clockid_t clock = CLOCK_MONOTONIC;
+	int looping = 1;
 	int r;
 
 	int status;
@@ -302,8 +303,22 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 
 	*timeouted = 0;
 
-	while (1) {
+	while (looping) {
 		waitflags = WNOHANG;
+
+		if (timeout >= 0) {
+			struct timespec time;
+
+			clock_gettime(clock, &time);
+			if ((time.tv_sec - sentinel.tv_sec) > timeout) {
+				*timeouted = 1;
+				kill(-pid, SIGKILL);
+				waitflags = 0;
+			}
+		}
+
+		if (waitpid(pid, &status, waitflags) == pid)
+			looping = 0;
 
 		r = poll(pfds, 2, WAIT_CHILD_POLL_TIMEOUT_MS);
 		if (r > 0) {
@@ -324,19 +339,7 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 			}
 
 			clock_gettime(clock, &sentinel);
-		} else if (timeout >= 0) {
-			struct timespec time;
-
-			clock_gettime(clock, &time);
-			if ((time.tv_sec - sentinel.tv_sec) > timeout) {
-				*timeouted = 1;
-				kill(-pid, SIGKILL);
-				waitflags = 0;
-			}
 		}
-
-		if (waitpid(pid, &status, waitflags) == pid)
-			break;
 	}
 
 	fflush(fps[0]);
