@@ -330,7 +330,7 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 			clock_gettime(clock, &time);
 			if ((time.tv_sec - sentinel.tv_sec) > timeout) {
 				*timeouted = 1;
-				kill(pid, SIGKILL);
+				kill(-pid, SIGKILL);
 				waitflags = 0;
 			}
 		}
@@ -392,6 +392,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				rc = -1;
 				break;
 			} else if (child == 0) {
+				setsid();
 				run_child(p->run_ptest, pipefd_stdout[1], pipefd_stderr[1]);
 			} else {
 				int status;
