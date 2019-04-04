@@ -316,8 +316,11 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 			}
 
 			if (pfds[1].revents != 0) {
-				while ((n = read(fds[1], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0)
+				while ((n = read(fds[1], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0) {
+					fflush(fps[0]);
 					fwrite(buf, n, 1, fps[1]);
+					fflush(fps[1]);
+				}
 			}
 
 			clock_gettime(clock, &sentinel);
@@ -336,7 +339,7 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 			break;
 	}
 
-
+	fflush(fps[0]);
 	return status;
 }
 
