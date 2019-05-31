@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <dirent.h>
+#include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -240,6 +241,23 @@ filter_ptests(struct ptest_list *head, char **ptests, int ptest_num)
 	return head_new;
 }
 
+/* Close all fds from 3 up to 'ulimit -n'
+ * i.e. do not close STDIN, STDOUT, STDERR.
+ * Typically called in in a child process after forking
+ * but before exec as a good policy especially for security.
+ */ 
+static void
+close_fds(void)
+{
+	struct rlimit curr_lim;
+	getrlimit(RLIMIT_NOFILE, &curr_lim);
+
+	int fd;
+	for (fd=3; fd < curr_lim.rlim_cur; fd++) {
+		(void) close(fd);
+   	}
+}
+
 static inline void
 run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 {
@@ -252,6 +270,7 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 	dup2(fd_stdout, STDOUT_FILENO);
 	// XXX: Redirect stderr to stdout to avoid buffer ordering problems.
 	dup2(fd_stdout, STDERR_FILENO);
+	close_fds();
 	execv(run_ptest, argv);
 
 	exit(1);

@@ -1,3 +1,9 @@
 #!/bin/sh
 
 echo "bash"
+printf "Hello World!,stderr\n" >&2
+echo "bash2"
+printf "Hello World!,stderr2\n" >&2
+echo "bash3"
+echo "bash4"
+printf "Hello World!,stderr3\n" >&2
