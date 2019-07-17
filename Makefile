@@ -29,7 +29,7 @@ TEST_DATA=$(shell echo `pwd`/tests/data)
 all: $(SOURCES) $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS)
-	$(CC) $(LDFLAGS) $(OBJECTS) -o $@
+	$(CC) $(LDFLAGS) $(OBJECTS) -lutil -o $@
 
 tests: $(TEST_SOURCES) $(TEST_EXECUTABLE)
 

@@ -1,5 +1,6 @@
 /**
  * Copyright (c) 2016 Intel Corporation
+ * Copyright (C) 2019 Wind River Systems, Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -22,23 +23,27 @@
  */
 
 #define _GNU_SOURCE 
+
 #include <stdio.h>
 
-#include <libgen.h>
-#include <signal.h>
-#include <poll.h>
-#include <fcntl.h>
-#include <time.h>
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <grp.h>
+#include <libgen.h>
+#include <poll.h>
+#include <pty.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+
+#include <sys/ioctl.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
-
-#include <errno.h>
 
 #include "ptest_list.h"
 #include "utils.h"
@@ -346,6 +351,53 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 	return status;
 }
 
+/* Returns an integer file descriptor.
+ * If it returns < 0, an error has occurred.
+ * Otherwise, it has returned the slave pty file descriptor.
+ * fp should be writable, likely stdout/err.
+ */
+static int
+setup_slave_pty(FILE *fp) { 
+	int pty_master = -1;
+	int pty_slave = -1;
+	char pty_name[256];
+	struct group *gptr;
+	gid_t gid;
+	int slave = -1;
+
+	if (openpty(&pty_master, &pty_slave, pty_name, NULL, NULL) < 0) {
+		fprintf(fp, "ERROR: openpty() failed with: %s.\n", strerror(errno));
+		return -1;
+	}
+
+	if ((gptr = getgrnam(pty_name)) != 0) {
+		gid = gptr->gr_gid;
+	} else {
+		/* If the tty group does not exist, don't change the
+		 * group on the slave pty, only the owner
+		 */
+		gid = -1;
+	}
+
+	/* chown/chmod the corresponding pty, if possible.
+	 * This will only work if the process has root permissions.
+	 */
+	if (chown(pty_name, getuid(), gid) != 0) {
+		fprintf(fp, "ERROR; chown() failed with: %s.\n", strerror(errno));
+	}
+
+	/* Makes the slave read/writeable for the user. */
+	if (chmod(pty_name, S_IRUSR|S_IWUSR) != 0) {
+		fprintf(fp, "ERROR: chmod() failed with: %s.\n", strerror(errno));
+	}
+
+	if ((slave = open(pty_name, O_RDWR)) == -1) {
+		fprintf(fp, "ERROR: open() failed with: %s.\n", strerror(errno));
+	}
+	return (slave);
+}
+
+
 int
 run_ptests(struct ptest_list *head, const struct ptest_options opts,
 		const char *progname, FILE *fp, FILE *fp_stderr)
@@ -362,6 +414,8 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	int timeouted;
 	time_t sttime, entime;
 	int duration;
+	int slave;
+	int pgid = -1;
 
 	if (opts.xml_filename) {
 		xh = xml_create(ptest_list_length(head), opts.xml_filename);
@@ -379,7 +433,6 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			close(pipefd_stdout[1]);
 			break;
 		}
-
 		fprintf(fp, "START: %s\n", progname);
 		PTEST_LIST_ITERATE_START(head, p);
 			char *ptest_dir = strdup(p->run_ptest);
@@ -388,6 +441,13 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				break;
 			}
 			dirname(ptest_dir);
+			if (ioctl(0, TIOCNOTTY) == -1) {
+				fprintf(fp, "ERROR: Unable to detach from controlling tty, %s\n", strerror(errno));
+			}
+
+			if ((pgid = getpgid(0)) == -1) {
+				fprintf(fp, "ERROR: getpgid() failed, %s\n", strerror(errno));
+			}
 
 			child = fork();
 			if (child == -1) {
@@ -395,12 +455,32 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				rc = -1;
 				break;
 			} else if (child == 0) {
-				setsid();
+				close(0);
+				if ((slave = setup_slave_pty(fp)) < 0) {
+					fprintf(fp, "ERROR: could not setup pty (%d).", slave);
+				}
+				if (setpgid(0,pgid) == -1) {
+					fprintf(fp, "ERROR: setpgid() failed, %s\n", strerror(errno));
+				}
+
+				if (setsid() ==  -1) {
+					fprintf(fp, "ERROR: setsid() failed, %s\n", strerror(errno));
+				}
+
+				if (ioctl(0, TIOCSCTTY, NULL) == -1) {
+					fprintf(fp, "ERROR: Unable to attach to controlling tty, %s\n", strerror(errno));
+				}
+
 				run_child(p->run_ptest, pipefd_stdout[1], pipefd_stderr[1]);
+
 			} else {
 				int status;
 				int fds[2]; fds[0] = pipefd_stdout[0]; fds[1] = pipefd_stderr[0];
 				FILE *fps[2]; fps[0] = fp; fps[1] = fp_stderr;
+
+				if (setpgid(child, pgid) == -1) {
+					fprintf(fp, "ERROR: setpgid() failed, %s\n", strerror(errno));
+				}
 
 				sttime = time(NULL);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, sttime));
