@@ -22,7 +22,7 @@
  * 	Aníbal Limón <anibal.limon@intel.com>
  */
 
-#define _GNU_SOURCE 
+#define _GNU_SOURCE
 
 #include <stdio.h>
 
@@ -84,7 +84,7 @@ get_available_ptests(const char *dir)
 	int n, i;
 	struct dirent **namelist;
 	int fail;
-	int saved_errno;
+	int saved_errno = -1; /* Initalize to invalid errno. */
 
 	do
 	{
@@ -190,9 +190,9 @@ print_ptests(struct ptest_list *head, FILE *fp)
 	} else {
 		struct ptest_list *n;
 		fprintf(fp, PRINT_PTESTS_AVAILABLE);
-		PTEST_LIST_ITERATE_START(head, n);
+		PTEST_LIST_ITERATE_START(head, n)
 			fprintf(fp, "%s\t%s\n", n->ptest, n->run_ptest);
-		PTEST_LIST_ITERATE_END;
+		PTEST_LIST_ITERATE_END
 		return 0;
 	}
 }
@@ -201,7 +201,7 @@ struct ptest_list *
 filter_ptests(struct ptest_list *head, char **ptests, int ptest_num)
 {
 	struct ptest_list *head_new = NULL, *n;
-	int fail = 0, i, saved_errno;
+	int fail = 0, i, saved_errno = 0;
 
 	do {
 		if (head == NULL || ptests == NULL || ptest_num <= 0) {
@@ -260,7 +260,7 @@ close_fds(void)
 	getrlimit(RLIMIT_NOFILE, &curr_lim);
 
 	int fd;
-	for (fd=3; fd < curr_lim.rlim_cur; fd++) {
+	for (fd=3; fd < (int)curr_lim.rlim_cur; fd++) {
 		(void) close(fd);
    	}
 }
@@ -277,10 +277,14 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 	dup2(fd_stdout, STDOUT_FILENO);
 	// XXX: Redirect stderr to stdout to avoid buffer ordering problems.
 	dup2(fd_stdout, STDERR_FILENO);
+
+	/* since it isn't use by the child, close(fd_stderr) ? */
+	close(fd_stderr); /* try using to see if this fixes bash run-read. rwm todo */
 	close_fds();
+
 	execv(run_ptest, argv);
 
-	exit(1);
+	/* exit(1); not needed? */
 }
 
 static inline int
@@ -293,7 +297,7 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 	int looping = 1;
 	int r;
 
-	int status;
+	int status = -1;
 	int waitflags;
 
 	pfds[0].fd = fds[0];
@@ -332,13 +336,13 @@ wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
 
 			if (pfds[0].revents != 0) {
 				while ((n = read(fds[0], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0)
-					fwrite(buf, n, 1, fps[0]);
+					fwrite(buf, (size_t)n, 1, fps[0]);
 			}
 
 			if (pfds[1].revents != 0) {
 				while ((n = read(fds[1], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0) {
 					fflush(fps[0]);
-					fwrite(buf, n, 1, fps[1]);
+					fwrite(buf, (size_t)n, 1, fps[1]);
 					fflush(fps[1]);
 				}
 			}
@@ -376,7 +380,7 @@ setup_slave_pty(FILE *fp) {
 		/* If the tty group does not exist, don't change the
 		 * group on the slave pty, only the owner
 		 */
-		gid = -1;
+		gid = (gid_t)-1;
 	}
 
 	/* chown/chmod the corresponding pty, if possible.
@@ -403,7 +407,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 		const char *progname, FILE *fp, FILE *fp_stderr)
 {
 	int rc = 0;
-	FILE *xh;
+	FILE *xh = NULL;
 
 	struct ptest_list *p;
 	char stime[GET_STIME_BUF_SIZE];
@@ -413,7 +417,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	int pipefd_stderr[2];
 	int timeouted;
 	time_t sttime, entime;
-	int duration;
+	time_t duration;
 	int slave;
 	int pgid = -1;
 
@@ -434,7 +438,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			break;
 		}
 		fprintf(fp, "START: %s\n", progname);
-		PTEST_LIST_ITERATE_START(head, p);
+		PTEST_LIST_ITERATE_START(head, p)
 			char *ptest_dir = strdup(p->run_ptest);
 			if (ptest_dir == NULL) {
 				rc = -1;
@@ -495,17 +499,17 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 					fprintf(fps[0], "\nERROR: Exit status is %d\n", status);
 					rc += 1;
 				}
-				fprintf(fps[0], "DURATION: %d\n", duration);
+				fprintf(fps[0], "DURATION: %d\n", (int) duration);
 				if (timeouted)
 					fprintf(fps[0], "TIMEOUT: %s\n", ptest_dir);
 
 				if (opts.xml_filename)
-					xml_add_case(xh, status, ptest_dir, timeouted, duration);
+					xml_add_case(xh, status, ptest_dir, timeouted, (int) duration);
 
 				fprintf(fp, "END: %s\n", ptest_dir);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, entime));
 			}
-		PTEST_LIST_ITERATE_END;
+		PTEST_LIST_ITERATE_END
 		fprintf(fp, "STOP: %s\n", progname);
 
 		close(pipefd_stdout[0]); close(pipefd_stdout[1]);

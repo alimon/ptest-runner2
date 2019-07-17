@@ -93,7 +93,7 @@ main(int argc, char *argv[])
 				}
 
 
-				opts.exclude = malloc(ptest_exclude_num * sizeof(char));
+				opts.exclude = malloc((size_t)ptest_exclude_num * sizeof(char));
 				CHECK_ALLOCATION(opts.exclude, 1, 1);
 
 				i = 0;
@@ -116,7 +116,7 @@ main(int argc, char *argv[])
 			case 'h':
 				print_usage(stdout, argv[0]);
 				exit(0);
-			break;
+			/* break; not needed, not reachable after exit() */
 			case 'x':
 				free(opts.xml_filename);
 				opts.xml_filename = strdup(optarg);
@@ -125,13 +125,12 @@ main(int argc, char *argv[])
 			default:
 				print_usage(stdout, argv[0]);
 				exit(1);
-			break;
 		}
 	}
 
 	ptest_num = argc - optind;
 	if (ptest_num > 0) {
-		size_t size = ptest_num * sizeof(char *);
+		size_t size = sizeof(char *) * (unsigned int) ptest_num;
 		opts.ptests = calloc(1, size);
 		CHECK_ALLOCATION(opts.ptests, size, 1);
 
@@ -163,7 +162,7 @@ main(int argc, char *argv[])
 		}
 
 		run = filter_ptests(head, opts.ptests, ptest_num);
-		CHECK_ALLOCATION(run, ptest_num, 1);
+		CHECK_ALLOCATION(run, (size_t) ptest_num, 1);
 		ptest_list_free_all(head);
 	}
 

@@ -29,8 +29,21 @@
 #include "utils.h"
 #include "ptest_list.h"
 
-#define VALIDATE_PTR_RINT(ptr) if (ptr == NULL) { errno = EINVAL; return -1; } 
-#define VALIDATE_PTR_RNULL(ptr) if (ptr == NULL) { errno = EINVAL; return NULL; } 
+#define VALIDATE_PTR_RINT(ptr) \
+	do { \
+		if (ptr == NULL) { \
+			errno = EINVAL; \
+			return -1; \
+		} \
+	} while (0)
+
+#define VALIDATE_PTR_RNULL(ptr) \
+	do { \
+		if (ptr == NULL) { \
+			errno = EINVAL; \
+			return NULL; \
+		} \
+	} while (0)
 
 struct ptest_list *
 ptest_list_alloc()

@@ -3,6 +3,8 @@ MEMCHECK=$(shell echo $$MEMCHECK)
 
 CC=cc
 CFLAGS=-std=gnu99 -pedantic -Wall -Werror -I .
+# CC=clang
+# CFLAGS=-std=gnu99 -Weverything -I .
 ifeq ($(RELEASE), 1)
 CFLAGS+= -O2 -DRELEASE
 else
@@ -22,7 +24,7 @@ TEST_SOURCES=tests/main.c tests/ptest_list.c tests/utils.c $(BASE_SOURCES)
 TEST_OBJECTS=$(TEST_SOURCES:.c=.o)
 TEST_EXECUTABLE=ptest-runner-test
 TEST_LDFLAGS=-lm -lrt -lpthread
-TEST_LIBSTATIC=-lcheck -lsubunit
+TEST_LIBSTATIC=-lcheck -lsubunit -lutil
 
 TEST_DATA=$(shell echo `pwd`/tests/data)
 

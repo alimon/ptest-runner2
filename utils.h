@@ -21,8 +21,8 @@
  * 	Aníbal Limón <anibal.limon@intel.com>
  */
 
-#ifndef _PTEST_RUNNER_UTILS_H_
-#define _PTEST_RUNNER_UTILS_H_
+#ifndef PTEST_RUNNER_UTILS_H
+#define PTEST_RUNNER_UTILS_H
 
 #include "ptest_list.h"
 
