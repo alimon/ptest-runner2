@@ -33,7 +33,6 @@
 #include "utils.h"
 
 #define PRINT_PTEST_BUF_SIZE 8192
-#define PRINT_PTEST_MAX_LINE 512
 
 extern char *opts_directory;
 
@@ -247,15 +246,15 @@ END_TEST
 static int
 filecmp(FILE *fp1, FILE *fp2)
 {
-    char f1, f2;
-    while (1) {
-			  int end = 0;
-        if ((f1 = getc(fp1)) == EOF) end++;
-        if ((f2 = getc(fp2)) == EOF) end++;
+	int f1, f2;
+	while (1) {
+		int end = 0;
+		if ((f1 = getc(fp1)) == EOF) end++;
+		if ((f2 = getc(fp2)) == EOF) end++;
 
-				if (end == 2) return 0;
-				if (end == 1) return 1;
-        if (f1 != f2) return 2;
+		if (end == 2) return 0;
+		if (end == 1) return 1;
+		if (f1 != f2) return 2;
     }
 }
 

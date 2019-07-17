@@ -62,13 +62,10 @@ main(int argc, char *argv[])
 				opts_directory = strdup(optarg);
 			break;
 			case 'h':
-				print_usage(stdout, argv[0]);
-				exit(0);
-			break;
+				/* fall though !! */
 			default:
 				print_usage(stdout, argv[0]);
 				exit(1);
-			break;
 		}
 	}
 
