@@ -29,6 +29,8 @@
 
 #include "ptest_list.h"
 
+extern Suite *ptest_list_suite(void);
+
 static int ptests_num = 6;
 static char *ptest_names[] = {
 	"python",

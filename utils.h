@@ -53,4 +53,6 @@ extern FILE *xml_create(int, char *);
 extern void xml_add_case(FILE *, int, const char *, int, int);
 extern void xml_finish(FILE *);
 
+void set_opts_dir(char * od);
+
 #endif

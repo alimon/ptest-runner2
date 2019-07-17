@@ -38,13 +38,13 @@ static SuiteFunction *suites[] = {
 	NULL,
 };
 
+extern void set_opts_dir(char *);
+
 static inline void
 print_usage(FILE *stream, char *progname)
 {
 	fprintf(stream, "Usage: %s <-d directory>\n", progname);
 }
-
-char *opts_directory;
 
 int
 main(int argc, char *argv[])
@@ -54,12 +54,12 @@ main(int argc, char *argv[])
 	int number_failed;
 	SuiteFunction *sf;
 
-	opts_directory = NULL;
+	char *opts_dir = NULL;
 
 	while ((opt = getopt(argc, argv, "d:t:h")) != -1) {
 		switch (opt) {
 			case 'd':
-				opts_directory = strdup(optarg);
+				opts_dir = strdup(optarg);
 			break;
 			case 'h':
 				/* fall though !! */
@@ -69,10 +69,11 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if (opts_directory == NULL) {
+	if (opts_dir == NULL) {
 		print_usage(stdout, argv[0]);
 		exit(1);
 	}
+	set_opts_dir(opts_dir);
 
 	i = 0;
 	number_failed = 0;
@@ -88,6 +89,8 @@ main(int argc, char *argv[])
 		i++;
 		sf = suites[i];
 	}
+	set_opts_dir(NULL);
+	free(opts_dir);
 
 	return number_failed;
 }

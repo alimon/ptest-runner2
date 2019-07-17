@@ -288,8 +288,7 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 }
 
 static inline int
-wait_child(const char *ptest_dir, const char *run_ptest, pid_t pid,
-		int timeout, int *fds, FILE **fps, int *timeouted)
+wait_child(pid_t pid, int timeout, int *fds, FILE **fps, int *timeouted)
 {
 	struct pollfd pfds[2];
 	struct timespec sentinel;
@@ -490,8 +489,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, sttime));
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
-				status = wait_child(ptest_dir, p->run_ptest, child,
-						opts.timeout, fds, fps, &timeouted);
+				status = wait_child(child, opts.timeout, fds, fps, &timeouted);
 				entime = time(NULL);
 				duration = entime - sttime;
 

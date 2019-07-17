@@ -32,9 +32,15 @@
 #include "ptest_list.h"
 #include "utils.h"
 
+Suite *utils_suite(void);
+
 #define PRINT_PTEST_BUF_SIZE 8192
 
-extern char *opts_directory;
+static char *opts_directory = NULL;
+
+void set_opts_dir(char * od) {
+	opts_directory = od;
+}
 
 static char *ptests_found[] = {
 	"bash",
@@ -68,7 +74,7 @@ find_word(int *found, const char *line, const char *word)
 }
 
 static void test_ptest_expected_failure(struct ptest_list *, const int, char *,
-	void (*h_analizer)(const int, FILE *, FILE *));
+	void (*h_analyzer)(const int, FILE *));
 
 START_TEST(test_get_available_ptests)
 {
@@ -189,7 +195,7 @@ START_TEST(test_run_ptests)
 END_TEST
 
 static void
-search_for_timeout_and_duration(const int rp, FILE *fp_stdout, FILE *fp_stderr)
+search_for_timeout_and_duration(const int rp, FILE *fp_stdout)
 {
 	const char *timeout_str = "TIMEOUT";
 	const char *duration_str = "DURATION";
@@ -218,7 +224,7 @@ START_TEST(test_run_timeout_duration_ptest)
 END_TEST
 
 static void
-search_for_fail(const int rp, FILE *fp_stdout, FILE *fp_stderr)
+search_for_fail(const int rp, FILE *fp_stdout)
 {
         const char *fail_str = "ERROR: Exit status is";
         char line_buf[PRINT_PTEST_BUF_SIZE];
@@ -284,7 +290,7 @@ START_TEST(test_xml_fail)
 END_TEST
 
 Suite *
-utils_suite()
+utils_suite(void)
 {
 	Suite *s;
 	TCase *tc_core;
@@ -308,7 +314,7 @@ utils_suite()
 
 static void
 test_ptest_expected_failure(struct ptest_list *head, const int timeout, char *progname,
-		void (*h_analizer)(const int, FILE *, FILE *))
+		void (*h_analyzer)(const int, FILE *))
 {
 	char *buf_stdout;
 	size_t size_stdout = PRINT_PTEST_BUF_SIZE;
@@ -329,9 +335,9 @@ test_ptest_expected_failure(struct ptest_list *head, const int timeout, char *pr
 		struct ptest_options opts = EmptyOpts;
 		opts.timeout = timeout;
 
-		h_analizer(
+		h_analyzer(
 			run_ptests(filtered, opts, progname, fp_stdout, fp_stderr),
-			fp_stdout, fp_stderr
+			fp_stdout
 		);
 
 		PTEST_LIST_FREE_ALL_CLEAN(filtered);
