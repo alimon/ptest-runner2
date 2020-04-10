@@ -47,8 +47,41 @@
 static inline void
 print_usage(FILE *stream, char *progname)
 {
-	fprintf(stream, "Usage: %s [-d directory] [-e exclude] [-l list] [-t timeout]"
+	fprintf(stream, "Usage: %s [-d directory directory2 ...] [-e exclude] [-l list] [-t timeout]"
 			" [-x xml-filename] [-h] [ptest1 ptest2 ...]\n", progname);
+}
+
+static char **
+str2array(char *str, const char *delim, int *num)
+{
+	char *c, *tok;
+	char **array;
+	int i;
+
+	c = str;
+	*num = 1;
+	while (*c) {
+		if (isspace(*c))
+			(*num)++;
+		c++;
+	}
+
+
+	array = malloc((size_t)*num * sizeof(char**));
+	CHECK_ALLOCATION(array, 1, 1);
+
+	i = 0;
+	tok = strtok_r(str, delim, &c);
+	array[i] = strdup(tok);
+	CHECK_ALLOCATION(array[i], 1, 1);
+	i++;
+	while ((tok = strtok_r(NULL, " ", &c)) != NULL) {
+		array[i] = strdup(tok);
+		CHECK_ALLOCATION(array[i], 1, 1);
+		i++;
+	}
+
+	return array;
 }
 
 int
@@ -59,7 +92,6 @@ main(int argc, char *argv[])
 	int i;
 	int rc;
 	int ptest_exclude_num = 0;
-	char *c, *tok;
 
 #ifdef MEMCHECK
 	mtrace();
@@ -68,7 +100,11 @@ main(int argc, char *argv[])
 	struct ptest_list *head, *run;
 	struct ptest_options opts;
 
-	opts.directory = strdup(DEFAULT_DIRECTORY);
+	opts.dirs = malloc(sizeof(char **) * 1);
+	CHECK_ALLOCATION(opts.dirs, 1, 1);
+	opts.dirs[0] = strdup(DEFAULT_DIRECTORY);
+	CHECK_ALLOCATION(opts.dirs[0], 1, 1);
+	opts.dirs_no = 1;
 	opts.exclude = NULL;
 	opts.list = 0;
 	opts.timeout = DEFAULT_TIMEOUT;
@@ -78,34 +114,12 @@ main(int argc, char *argv[])
 	while ((opt = getopt(argc, argv, "d:e:lt:x:h")) != -1) {
 		switch (opt) {
 			case 'd':
-				free(opts.directory);
-				opts.directory = realpath(optarg, NULL);
-				CHECK_ALLOCATION(opts.directory, 1, 1);
+				free(opts.dirs[0]);
+				free(opts.dirs);
+				opts.dirs = str2array(optarg, " ", &(opts.dirs_no)); 
 			break;
 			case 'e':
-				c = optarg;
-				ptest_exclude_num = 1;
-
-				while (*c) {
-					if (isspace(*c))
-						ptest_exclude_num++;
-					c++;
-				}
-
-
-				opts.exclude = malloc((size_t)ptest_exclude_num * sizeof(char));
-				CHECK_ALLOCATION(opts.exclude, 1, 1);
-
-				i = 0;
-				tok = strtok_r(optarg, " ", &c);
-				opts.exclude[i] = strdup(tok);
-				CHECK_ALLOCATION(opts.exclude[i], 1, 1);
-				i++;
-				while ((tok = strtok_r(NULL, " ", &c)) != NULL) {
-					opts.exclude[i] = strdup(tok);
-					CHECK_ALLOCATION(opts.exclude[i], 1, 1);
-					i++;
-				}
+				opts.exclude = str2array(optarg, " ", &ptest_exclude_num);
 			break;
 			case 'l':
 				opts.list = 1;
@@ -140,10 +154,25 @@ main(int argc, char *argv[])
 		}
 	}
 
-	head = get_available_ptests(opts.directory);
+	head = NULL;
+	for (i = 0; i < opts.dirs_no; i ++) {
+		struct ptest_list *tmp;
+
+		tmp = get_available_ptests(opts.dirs[i]);
+		if (tmp == NULL) {
+			fprintf(stderr, PRINT_PTESTS_NOT_FOUND_DIR, opts.dirs[i]);
+			continue;
+		}
+
+
+		if (head == NULL)
+			head = tmp;
+		else
+			head = ptest_list_extend(head, tmp);
+	}
 	if (head == NULL || ptest_list_length(head) == 0) {
 		fprintf(stderr, PRINT_PTESTS_NOT_FOUND);
-		return 1;
+			return 1;
 	}
 
 	if (opts.list) {

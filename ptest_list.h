@@ -64,5 +64,6 @@ extern struct ptest_list *ptest_list_search(struct ptest_list *, char *);
 extern struct ptest_list *ptest_list_search_by_file(struct ptest_list *, char *, struct stat);
 extern struct ptest_list *ptest_list_add(struct ptest_list *, char *, char *);
 extern struct ptest_list *ptest_list_remove(struct ptest_list *, char *, int);
+extern struct ptest_list *ptest_list_extend(struct ptest_list *, struct ptest_list *);
 
 #endif // PTEST_RUNNER_LIST_H

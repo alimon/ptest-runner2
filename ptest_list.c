@@ -216,3 +216,20 @@ ptest_list_remove(struct ptest_list *head, char *ptest, int free)
 
 	return p;
 }
+
+struct ptest_list *
+ptest_list_extend(struct ptest_list *head, struct ptest_list *extend)
+{
+	struct ptest_list *p, *q; 
+
+	VALIDATE_PTR_RNULL(head);
+	VALIDATE_PTR_RNULL(extend);
+
+	for (p = head; p->next != NULL; p = p->next);
+	q = extend->next;
+	p->next = q;
+
+	free(extend);
+
+	return head;
+}
