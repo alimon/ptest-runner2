@@ -437,6 +437,9 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			break;
 		}
 		fprintf(fp, "START: %s\n", progname);
+		if (isatty(0) && ioctl(0, TIOCNOTTY) == -1) {
+			fprintf(fp, "ERROR: Unable to detach from controlling tty, %s\n", strerror(errno));
+		}
 		PTEST_LIST_ITERATE_START(head, p)
 			char *ptest_dir = strdup(p->run_ptest);
 			if (ptest_dir == NULL) {
@@ -444,9 +447,6 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				break;
 			}
 			dirname(ptest_dir);
-			if (ioctl(0, TIOCNOTTY) == -1) {
-				fprintf(fp, "ERROR: Unable to detach from controlling tty, %s\n", strerror(errno));
-			}
 
 			if ((pgid = getpgid(0)) == -1) {
 				fprintf(fp, "ERROR: getpgid() failed, %s\n", strerror(errno));
