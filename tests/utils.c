@@ -93,6 +93,7 @@ START_TEST(test_get_available_ptests)
 END_TEST
 
 START_TEST(test_print_ptests)
+{
 	struct ptest_list *head;
 
 	char *buf;
@@ -137,9 +138,11 @@ START_TEST(test_print_ptests)
 
 	fclose(fp);
 	free(buf);
+}
 END_TEST
 
 START_TEST(test_filter_ptests)
+{
 	struct ptest_list *head = get_available_ptests(opts_directory);
 	struct ptest_list *head_new;
 	char *ptest_not_exists[] = {
@@ -160,9 +163,11 @@ START_TEST(test_filter_ptests)
 
 	ptest_list_free_all(head);
 	ptest_list_free_all(head_new);
+}
 END_TEST
 
 START_TEST(test_run_ptests)
+{
 	struct ptest_list *head;
 	struct ptest_options opts = EmptyOpts;
 	opts.timeout = 1;
@@ -192,6 +197,7 @@ START_TEST(test_run_ptests)
 	free(buf_stdout);
 	fclose(fp_stderr);
 	free(buf_stderr);
+}
 END_TEST
 
 static void
@@ -215,12 +221,14 @@ search_for_timeout_and_duration(const int rp, FILE *fp_stdout)
 }
 
 START_TEST(test_run_timeout_duration_ptest)
+{
 	struct ptest_list *head = get_available_ptests(opts_directory);
 	int timeout = 1;
 
 	test_ptest_expected_failure(head, timeout, "hang", search_for_timeout_and_duration);
 
 	ptest_list_free_all(head);
+}
 END_TEST
 
 static void
@@ -241,12 +249,14 @@ search_for_fail(const int rp, FILE *fp_stdout)
 }
 
 START_TEST(test_run_fail_ptest)
+{
 	struct ptest_list *head = get_available_ptests(opts_directory);
 	int timeout = 1;
 
 	test_ptest_expected_failure(head, timeout, "fail", search_for_fail);
 
 	ptest_list_free_all(head);
+}
 END_TEST
 
 static int
@@ -265,6 +275,7 @@ filecmp(FILE *fp1, FILE *fp2)
 }
 
 START_TEST(test_xml_pass)
+{
 	FILE *xp;
 	xp = xml_create(2, "./test.xml");
 	ck_assert(xp != NULL);
@@ -283,10 +294,13 @@ START_TEST(test_xml_pass)
 	fclose(fr);
 	fclose(fp);
 	unlink("./test.xml");
+}
 END_TEST
 
 START_TEST(test_xml_fail)
+{
 	ck_assert(xml_create(2, "./") == NULL);
+}
 END_TEST
 
 Suite *
