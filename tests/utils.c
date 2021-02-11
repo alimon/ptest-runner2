@@ -234,7 +234,7 @@ END_TEST
 static void
 search_for_fail(const int rp, FILE *fp_stdout)
 {
-        const char *fail_str = "ERROR: Exit status is";
+        const char *fail_str = "ERROR: Exit status is 10";
         char line_buf[PRINT_PTEST_BUF_SIZE];
         int found_fail = 0;
         char *line = NULL;

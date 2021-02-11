@@ -352,6 +352,9 @@ wait_child(pid_t pid, int timeout, int *fds, FILE **fps, int *timeouted)
 
 			clock_gettime(clock, &sentinel);
 		}
+
+		if (WIFEXITED(status))
+			status = WEXITSTATUS(status);
 	}
 
 	fflush(fps[0]);
