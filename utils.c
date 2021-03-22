@@ -34,6 +34,7 @@
 #include <poll.h>
 #include <pty.h>
 #include <signal.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -85,6 +86,9 @@ get_available_ptests(const char *dir)
 	struct dirent **namelist;
 	int fail;
 	int saved_errno = -1; /* Initalize to invalid errno. */
+	char realdir[PATH_MAX];
+
+	realpath(dir, realdir);
 
 	do
 	{
@@ -93,7 +97,7 @@ get_available_ptests(const char *dir)
 		if (head == NULL)
 			break;
 
-		if (stat(dir, &st_buf) == -1) {
+		if (stat(realdir, &st_buf) == -1) {
 			PTEST_LIST_FREE_CLEAN(head);
 			break;
 		}
@@ -104,7 +108,7 @@ get_available_ptests(const char *dir)
 			break;
 		}
 
-		n = scandir(dir, &namelist, NULL, alphasort);
+		n = scandir(realdir, &namelist, NULL, alphasort);
 		if (n == -1) {
 			PTEST_LIST_FREE_CLEAN(head);
 			break;
@@ -130,7 +134,7 @@ get_available_ptests(const char *dir)
 			}
 
 			if (asprintf(&run_ptest, "%s/%s/ptest/run-ptest",
-			    dir, d_name) == -1)  {
+			    realdir, d_name) == -1)  {
 				fail = 1;
 				saved_errno = errno;
 				free(d_name);
