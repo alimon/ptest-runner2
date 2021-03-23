@@ -158,7 +158,7 @@ main(int argc, char *argv[])
 	for (i = 0; i < opts.dirs_no; i ++) {
 		struct ptest_list *tmp;
 
-		tmp = get_available_ptests(opts.dirs[i]);
+		tmp = get_available_ptests(opts.dirs[i], opts.timeout);
 		if (tmp == NULL) {
 			fprintf(stderr, PRINT_PTESTS_NOT_FOUND_DIR, opts.dirs[i]);
 			continue;

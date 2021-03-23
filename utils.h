@@ -45,7 +45,7 @@ struct ptest_options {
 
 
 extern void check_allocation1(void *, size_t, char *, int, int);
-extern struct ptest_list *get_available_ptests(const char *);
+extern struct ptest_list *get_available_ptests(const char *, int);
 extern int print_ptests(struct ptest_list *, FILE *);
 extern struct ptest_list *filter_ptests(struct ptest_list *, char **, int);
 extern int run_ptests(struct ptest_list *, const struct ptest_options,

@@ -50,6 +50,7 @@
 struct ptest_list {
 	char *ptest;
 	char *run_ptest;
+	int timeout;
 
 	struct ptest_list *next;
 	struct ptest_list *prev;
@@ -62,7 +63,7 @@ extern int ptest_list_free_all(struct ptest_list *);
 extern int ptest_list_length(struct ptest_list *);
 extern struct ptest_list *ptest_list_search(struct ptest_list *, char *);
 extern struct ptest_list *ptest_list_search_by_file(struct ptest_list *, char *, struct stat);
-extern struct ptest_list *ptest_list_add(struct ptest_list *, char *, char *);
+extern struct ptest_list *ptest_list_add(struct ptest_list *, char *, char *, int);
 extern struct ptest_list *ptest_list_remove(struct ptest_list *, char *, int);
 extern struct ptest_list *ptest_list_extend(struct ptest_list *, struct ptest_list *);
 

@@ -84,9 +84,30 @@ check_allocation1(void *p, size_t size, char *file, int line, int exit_on_null)
 	}
 }
 
+static inline char *
+get_ptest_file(char **ptest_file, struct stat *st_buf, const char *main_dir,
+		const char *ptest_dir, const char *file_name)
+{
+	if (asprintf(ptest_file, "%s/%s/ptest/%s",
+	    main_dir, ptest_dir, file_name) == -1)  {
+		return NULL;
+	}
+
+	if (stat(*ptest_file, st_buf) == -1) {
+		free(*ptest_file);
+		return NULL;
+	}
+
+	if (!S_ISREG(st_buf->st_mode)) {
+		free(*ptest_file);
+		return NULL;
+	}
+
+	return *ptest_file;
+}
 
 struct ptest_list *
-get_available_ptests(const char *dir)
+get_available_ptests(const char *dir, int global_timeout)
 {
 	struct ptest_list *head;
 	struct stat st_buf;
@@ -123,10 +144,11 @@ get_available_ptests(const char *dir)
 			break;
 		}
 
-
 		fail = 0;
 		for (i = 0; i < n; i++) {
 			char *run_ptest;
+			char *timeout_ptest;
+			int timeout;
 
 			char *d_name = strdup(namelist[i]->d_name);
 			CHECK_ALLOCATION(d_name, sizeof(namelist[i]->d_name), 0);
@@ -142,22 +164,8 @@ get_available_ptests(const char *dir)
 				continue;
 			}
 
-			if (asprintf(&run_ptest, "%s/%s/ptest/run-ptest",
-			    realdir, d_name) == -1)  {
-				fail = 1;
+			if (get_ptest_file(&run_ptest, &st_buf, realdir, d_name, "run-ptest") == NULL) {
 				saved_errno = errno;
-				free(d_name);
-				break;
-			}
-
-			if (stat(run_ptest, &st_buf) == -1) {
-				free(run_ptest);
-				free(d_name);
-				continue;
-			}
-
-			if (!S_ISREG(st_buf.st_mode)) {
-				free(run_ptest);
 				free(d_name);
 				continue;
 			}
@@ -168,8 +176,26 @@ get_available_ptests(const char *dir)
 				continue;
 			}
 
+			timeout = global_timeout;
+			if (get_ptest_file(&timeout_ptest, &st_buf, realdir, d_name, "timeout-ptest")) {
+				FILE *f = fopen(timeout_ptest, "r");
+
+				if (f == NULL) {
+					fail = 1;
+					saved_errno = errno;
+					free(run_ptest);
+					free(d_name);
+					free(timeout_ptest);
+					break;
+				}
+				fscanf(f, "%d", &timeout);
+				fclose(f);
+
+				free(timeout_ptest);
+			}
+
 			struct ptest_list *p = ptest_list_add(head,
-				d_name, run_ptest);
+				d_name, run_ptest, timeout);
 			CHECK_ALLOCATION(p, sizeof(struct ptest_list *), 0);
 			if (p == NULL) {
 				fail = 1;
@@ -229,6 +255,7 @@ filter_ptests(struct ptest_list *head, char **ptests, int ptest_num)
 		for (i = 0; i < ptest_num; i++) {
 			char *ptest;
 			char *run_ptest;
+			int timeout;
 
 			n = ptest_list_search(head, ptests[i]);
 			if (n == NULL) {
@@ -239,13 +266,14 @@ filter_ptests(struct ptest_list *head, char **ptests, int ptest_num)
 
 			ptest = strdup(n->ptest);
 			run_ptest = strdup(n->run_ptest);
+			timeout = n->timeout;
 			if (ptest == NULL || run_ptest == NULL) {
 				saved_errno = errno;
 				fail = 1;
 				break;
 			}
 
-			if (ptest_list_add(head_new, ptest, run_ptest) == NULL) {
+			if (ptest_list_add(head_new, ptest, run_ptest, timeout) == NULL) {
 				saved_errno = errno;
 				fail = 1;
 				break;
@@ -509,8 +537,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, sttime));
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
-
-				status = wait_child(child, opts.timeout);
+				status = wait_child(child, p->timeout);
 
 				entime = time(NULL);
 				duration = entime - sttime;
@@ -528,6 +555,8 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 				fprintf(fp, "END: %s\n", ptest_dir);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, entime));
+
+				free(ptest_dir);
 			}
 		PTEST_LIST_ITERATE_END
 		fprintf(fp, "STOP: %s\n", progname);

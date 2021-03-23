@@ -166,7 +166,7 @@ ptest_list_search_by_file(struct ptest_list *head, char *run_ptest, struct stat 
 }
 
 struct ptest_list *
-ptest_list_add(struct ptest_list *head, char *ptest, char *run_ptest)
+ptest_list_add(struct ptest_list *head, char *ptest, char *run_ptest, int timeout)
 {
 	struct ptest_list *n, *p; 
 
@@ -179,6 +179,7 @@ ptest_list_add(struct ptest_list *head, char *ptest, char *run_ptest)
 
 	n->ptest = ptest;
 	n->run_ptest = run_ptest;
+	n->timeout = timeout;
 
 	n->prev = NULL;
 	n->next = NULL;
