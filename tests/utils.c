@@ -78,7 +78,7 @@ static void test_ptest_expected_failure(struct ptest_list *, const int, char *,
 
 START_TEST(test_get_available_ptests)
 {
-	struct ptest_list *head = get_available_ptests(opts_directory);
+	struct ptest_list *head = get_available_ptests(opts_directory, 1);
 	int i;
 
 	ck_assert(ptest_list_length(head) == ptests_found_length);
@@ -121,7 +121,7 @@ START_TEST(test_print_ptests)
 	ck_assert(line != NULL);
 	ck_assert(strcmp(line, PRINT_PTESTS_NOT_FOUND) == 0);
 
-	head = get_available_ptests(opts_directory);
+	head = get_available_ptests(opts_directory, 1);
 	ck_assert(print_ptests(head, fp) == 0);
 	ptest_list_free_all(head);
 	line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp);
@@ -143,7 +143,7 @@ END_TEST
 
 START_TEST(test_filter_ptests)
 {
-	struct ptest_list *head = get_available_ptests(opts_directory);
+	struct ptest_list *head = get_available_ptests(opts_directory, 1);
 	struct ptest_list *head_new;
 	char *ptest_not_exists[] = {
 		"glib",
@@ -185,7 +185,7 @@ START_TEST(test_run_ptests)
 	fp_stderr = open_memstream(&buf_stderr, &size_stderr);
 	ck_assert(fp_stderr != NULL);
 
-	head = get_available_ptests(opts_directory);
+	head = get_available_ptests(opts_directory, 1);
 	ptest_list_remove(head, "hang", 1);
 	ptest_list_remove(head, "fail", 1);
 
@@ -222,8 +222,8 @@ search_for_timeout_and_duration(const int rp, FILE *fp_stdout)
 
 START_TEST(test_run_timeout_duration_ptest)
 {
-	struct ptest_list *head = get_available_ptests(opts_directory);
-	int timeout = 1;
+	int timeout = 20;
+	struct ptest_list *head = get_available_ptests(opts_directory, timeout);
 
 	test_ptest_expected_failure(head, timeout, "hang", search_for_timeout_and_duration);
 
@@ -250,8 +250,8 @@ search_for_fail(const int rp, FILE *fp_stdout)
 
 START_TEST(test_run_fail_ptest)
 {
-	struct ptest_list *head = get_available_ptests(opts_directory);
 	int timeout = 1;
+	struct ptest_list *head = get_available_ptests(opts_directory, timeout);
 
 	test_ptest_expected_failure(head, timeout, "fail", search_for_fail);
 

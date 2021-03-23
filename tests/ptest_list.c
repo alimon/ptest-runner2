@@ -52,7 +52,7 @@ END_TEST
 START_TEST(test_add)
 {
 	struct ptest_list *head = ptest_list_alloc();
-	ck_assert(ptest_list_add(head, strdup("perl"), NULL) != NULL);
+	ck_assert(ptest_list_add(head, strdup("perl"), NULL, 1) != NULL);
 	ptest_list_free_all(head);
 }
 END_TEST
@@ -67,7 +67,7 @@ START_TEST(test_free_all)
 
 	head = ptest_list_alloc();
 	for (i = 0; i < ptests_num; i++)
-		ptest_list_add(head, strdup(ptest_names[i]), NULL);
+		ptest_list_add(head, strdup(ptest_names[i]), NULL, 1);
 
 	ptest_list_free_all(head);
 }
@@ -84,7 +84,7 @@ START_TEST(test_length)
  
 	head = ptest_list_alloc();
 	for (i = 0; i < ptests_num; i++)
-		ptest_list_add(head, strdup(ptest_names[i]), NULL);
+		ptest_list_add(head, strdup(ptest_names[i]), NULL, 1);
 
 	ck_assert_int_eq(ptest_list_length(head), ptests_num);
 	ptest_list_free_all(head);
@@ -103,7 +103,7 @@ START_TEST(test_search)
 	head = ptest_list_alloc();
 	for (i = 0; i < ptests_num; i++) {
 		ptest = strdup(ptest_names[i]);
-		ptest_list_add(head, ptest, NULL);
+		ptest_list_add(head, ptest, NULL, 1);
 	}
 
 	for (i = ptests_num - 1; i >= 0; i--)
@@ -122,7 +122,7 @@ START_TEST(test_remove)
 
 	for (i = 0; i < ptests_num; i++) {
 		ptest = strdup(ptest_names[i]);
-		ptest_list_add(head, ptest, NULL);
+		ptest_list_add(head, ptest, NULL, 1);
 	}
 
 	/* Remove node free'ing */
