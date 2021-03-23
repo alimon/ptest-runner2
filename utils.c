@@ -39,6 +39,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include <sys/ioctl.h>
 #include <sys/resource.h>
@@ -52,6 +53,11 @@
 #define GET_STIME_BUF_SIZE 1024
 #define WAIT_CHILD_POLL_TIMEOUT_MS 200
 #define WAIT_CHILD_BUF_MAX_SIZE 1024
+
+static struct {
+	int fds[2];
+	FILE *fps[2];
+} _child_reader;
 
 static inline char *
 get_stime(char *stime, size_t size, time_t t)
@@ -269,6 +275,44 @@ close_fds(void)
    	}
 }
 
+static void *
+read_child(void *arg)
+{
+	struct pollfd pfds[2];
+	int r;
+
+	pfds[0].fd = _child_reader.fds[0];
+	pfds[0].events = POLLIN;
+	pfds[1].fd = _child_reader.fds[1];
+	pfds[1].events = POLLIN;
+
+	do {
+		r = poll(pfds, 2, WAIT_CHILD_POLL_TIMEOUT_MS);
+		if (r > 0) {
+			char buf[WAIT_CHILD_BUF_MAX_SIZE];
+			ssize_t n;
+
+			if (pfds[0].revents != 0) {
+				n = read(_child_reader.fds[0], buf, WAIT_CHILD_BUF_MAX_SIZE);
+				if (n > 0)
+					fwrite(buf, (size_t)n, 1, _child_reader.fps[0]);
+			}
+
+			if (pfds[1].revents != 0) {
+				n = read(_child_reader.fds[1], buf, WAIT_CHILD_BUF_MAX_SIZE);
+				if (n > 0)
+					fwrite(buf, (size_t)n, 1, _child_reader.fps[1]);
+			}
+
+		}
+
+		fflush(_child_reader.fps[0]);
+		fflush(_child_reader.fps[1]);
+	} while (1);
+
+	return NULL;
+}
+
 static inline void
 run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 {
@@ -292,21 +336,14 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 }
 
 static inline int
-wait_child(pid_t pid, int timeout, int *fds, FILE **fps, int *timeouted)
+wait_child(pid_t pid, int timeout, int *timeouted)
 {
-	struct pollfd pfds[2];
 	struct timespec sentinel;
 	clockid_t clock = CLOCK_MONOTONIC;
 	int looping = 1;
-	int r;
 
 	int status = -1;
 	int waitflags;
-
-	pfds[0].fd = fds[0];
-	pfds[0].events = POLLIN;
-	pfds[1].fd = fds[1];
-	pfds[1].events = POLLIN;
 
 	if (clock_gettime(clock, &sentinel) == -1) {
 		clock = CLOCK_REALTIME;
@@ -332,32 +369,12 @@ wait_child(pid_t pid, int timeout, int *fds, FILE **fps, int *timeouted)
 		if (waitpid(pid, &status, waitflags) == pid)
 			looping = 0;
 
-		r = poll(pfds, 2, WAIT_CHILD_POLL_TIMEOUT_MS);
-		if (r > 0) {
-			char buf[WAIT_CHILD_BUF_MAX_SIZE];
-			ssize_t n;
-
-			if (pfds[0].revents != 0) {
-				while ((n = read(fds[0], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0)
-					fwrite(buf, (size_t)n, 1, fps[0]);
-			}
-
-			if (pfds[1].revents != 0) {
-				while ((n = read(fds[1], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0) {
-					fflush(fps[0]);
-					fwrite(buf, (size_t)n, 1, fps[1]);
-					fflush(fps[1]);
-				}
-			}
-
-			clock_gettime(clock, &sentinel);
-		}
+		clock_gettime(clock, &sentinel);
 
 		if (WIFEXITED(status))
 			status = WEXITSTATUS(status);
 	}
 
-	fflush(fps[0]);
 	return status;
 }
 
@@ -426,6 +443,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	time_t duration;
 	int slave;
 	int pgid = -1;
+	pthread_t tid;
 
 	if (opts.xml_filename) {
 		xh = xml_create(ptest_list_length(head), opts.xml_filename);
@@ -435,18 +453,32 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 	do
 	{
-		if ((rc = pipe2(pipefd_stdout, O_NONBLOCK)) == -1) 
+		if ((rc = pipe(pipefd_stdout)) == -1)
 			break;
 
-		if ((rc = pipe2(pipefd_stderr, O_NONBLOCK)) == -1) {
+		if ((rc = pipe(pipefd_stderr)) == -1) {
 			close(pipefd_stdout[0]);
 			close(pipefd_stdout[1]);
 			break;
 		}
-		fprintf(fp, "START: %s\n", progname);
+
 		if (isatty(0) && ioctl(0, TIOCNOTTY) == -1) {
 			fprintf(fp, "ERROR: Unable to detach from controlling tty, %s\n", strerror(errno));
 		}
+
+		_child_reader.fds[0] = pipefd_stdout[0];
+		_child_reader.fds[1] = pipefd_stderr[0];
+		_child_reader.fps[0] = fp;
+		_child_reader.fps[1] = fp_stderr;
+		rc = pthread_create(&tid, NULL, read_child, NULL);
+		if (rc != 0) {
+			fprintf(fp, "ERROR: Failed to create reader thread, %s\n", strerror(errno));
+			close(pipefd_stdout[0]);
+			close(pipefd_stdout[1]);
+			break;
+		}
+
+		fprintf(fp, "START: %s\n", progname);
 		PTEST_LIST_ITERATE_START(head, p)
 			char *ptest_dir = strdup(p->run_ptest);
 			if (ptest_dir == NULL) {
@@ -485,8 +517,6 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 			} else {
 				int status;
-				int fds[2]; fds[0] = pipefd_stdout[0]; fds[1] = pipefd_stderr[0];
-				FILE *fps[2]; fps[0] = fp; fps[1] = fp_stderr;
 
 				if (setpgid(child, pgid) == -1) {
 					fprintf(fp, "ERROR: setpgid() failed, %s\n", strerror(errno));
@@ -496,17 +526,20 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, sttime));
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
-				status = wait_child(child, opts.timeout, fds, fps, &timeouted);
+
+				status = wait_child(child, opts.timeout, &timeouted);
+
+
 				entime = time(NULL);
 				duration = entime - sttime;
 
 				if (status) {
-					fprintf(fps[0], "\nERROR: Exit status is %d\n", status);
+					fprintf(fp, "\nERROR: Exit status is %d\n", status);
 					rc += 1;
 				}
-				fprintf(fps[0], "DURATION: %d\n", (int) duration);
+				fprintf(fp, "DURATION: %d\n", (int) duration);
 				if (timeouted)
-					fprintf(fps[0], "TIMEOUT: %s\n", ptest_dir);
+					fprintf(fp, "TIMEOUT: %s\n", ptest_dir);
 
 				if (opts.xml_filename)
 					xml_add_case(xh, status, ptest_dir, timeouted, (int) duration);
@@ -516,6 +549,9 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			}
 		PTEST_LIST_ITERATE_END
 		fprintf(fp, "STOP: %s\n", progname);
+
+		pthread_cancel(tid);
+		pthread_join(tid, NULL);
 
 		close(pipefd_stdout[0]); close(pipefd_stdout[1]);
 		close(pipefd_stderr[0]); close(pipefd_stderr[1]);

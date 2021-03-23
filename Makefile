@@ -31,7 +31,7 @@ TEST_DATA=$(shell echo `pwd`/tests/data)
 all: $(SOURCES) $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS)
-	$(CC) $(LDFLAGS) $(OBJECTS) -lutil -o $@
+	$(CC) $(LDFLAGS) $(OBJECTS) -pthread -lutil -o $@
 
 tests: $(TEST_SOURCES) $(TEST_EXECUTABLE)
 
