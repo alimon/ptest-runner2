@@ -57,6 +57,10 @@
 static struct {
 	int fds[2];
 	FILE *fps[2];
+
+	int timeout;
+	int timeouted;
+	pid_t pid;
 } _child_reader;
 
 static inline char *
@@ -304,6 +308,9 @@ read_child(void *arg)
 					fwrite(buf, (size_t)n, 1, _child_reader.fps[1]);
 			}
 
+			/* Child output reset alarm */
+			alarm(0);
+			alarm(_child_reader.timeout);
 		}
 
 		fflush(_child_reader.fps[0]);
@@ -335,45 +342,28 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 	/* exit(1); not needed? */
 }
 
-static inline int
-wait_child(pid_t pid, int timeout, int *timeouted)
+static void
+timeout_child_handler(int signo)
 {
-	struct timespec sentinel;
-	clockid_t clock = CLOCK_MONOTONIC;
-	int looping = 1;
+	_child_reader.timeouted = 1;
+	kill(-_child_reader.pid, SIGKILL);
+}
 
+static inline int
+wait_child(pid_t pid, int timeout)
+{
 	int status = -1;
-	int waitflags;
 
-	if (clock_gettime(clock, &sentinel) == -1) {
-		clock = CLOCK_REALTIME;
-		clock_gettime(clock, &sentinel);
-	}
+	_child_reader.timeout = timeout;
+	_child_reader.timeouted = 0;
+	_child_reader.pid = pid;
 
-	*timeouted = 0;
+	/* setup alarm to timeout based on std{out,err} in the child */
+	alarm(timeout);
 
-	while (looping) {
-		waitflags = WNOHANG;
-
-		if (timeout >= 0) {
-			struct timespec time;
-
-			clock_gettime(clock, &time);
-			if ((time.tv_sec - sentinel.tv_sec) > timeout) {
-				*timeouted = 1;
-				kill(-pid, SIGKILL);
-				waitflags = 0;
-			}
-		}
-
-		if (waitpid(pid, &status, waitflags) == pid)
-			looping = 0;
-
-		clock_gettime(clock, &sentinel);
-
-		if (WIFEXITED(status))
-			status = WEXITSTATUS(status);
-	}
+	waitpid(pid, &status, 0);
+	if (WIFEXITED(status))
+		status = WEXITSTATUS(status);
 
 	return status;
 }
@@ -438,7 +428,6 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	pid_t child;
 	int pipefd_stdout[2];
 	int pipefd_stderr[2];
-	int timeouted;
 	time_t sttime, entime;
 	time_t duration;
 	int slave;
@@ -477,6 +466,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			close(pipefd_stdout[1]);
 			break;
 		}
+		signal(SIGALRM, timeout_child_handler);
 
 		fprintf(fp, "START: %s\n", progname);
 		PTEST_LIST_ITERATE_START(head, p)
@@ -527,8 +517,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
 
-				status = wait_child(child, opts.timeout, &timeouted);
-
+				status = wait_child(child, opts.timeout);
 
 				entime = time(NULL);
 				duration = entime - sttime;
@@ -538,11 +527,11 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 					rc += 1;
 				}
 				fprintf(fp, "DURATION: %d\n", (int) duration);
-				if (timeouted)
+				if (_child_reader.timeouted)
 					fprintf(fp, "TIMEOUT: %s\n", ptest_dir);
 
 				if (opts.xml_filename)
-					xml_add_case(xh, status, ptest_dir, timeouted, (int) duration);
+					xml_add_case(xh, status, ptest_dir, _child_reader.timeouted, (int) duration);
 
 				fprintf(fp, "END: %s\n", ptest_dir);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, entime));
