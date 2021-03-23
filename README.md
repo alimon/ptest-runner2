@@ -43,7 +43,7 @@ Also if you want to run memory leaks tests you need mcheck available in glibc,
 $ MEMCHECK=1 make
 $ export MALLOC_TRACE=/tmp/t
 $ ./ptest-runner -d tests/data -t 1
-$ mtrace ./ptest-runner $(MALLOC_TRACE)
+$ mtrace ./ptest-runner $MALLOC_TRACE
 ```
 
 ## Contributions
