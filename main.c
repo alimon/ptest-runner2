@@ -84,6 +84,25 @@ str2array(char *str, const char *delim, int *num)
 	return array;
 }
 
+void cleanup_ptest_opts(struct ptest_options *opts)
+{
+	for (int i=0; i < opts->dirs_no; i++)
+		free(opts->dirs[i]);
+
+	free(opts->dirs);
+	opts->dirs = NULL;
+
+	if (opts->ptests) {
+		free(opts->ptests);
+		opts->ptests = NULL;
+	}
+
+	if (opts->xml_filename) {
+		free(opts->xml_filename);
+		opts->xml_filename = NULL;
+	}
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -98,7 +117,7 @@ main(int argc, char *argv[])
 #endif
 
 	struct ptest_list *head, *run;
-	struct ptest_options opts;
+	__attribute__ ((__cleanup__(cleanup_ptest_opts))) struct ptest_options opts;
 
 	opts.dirs = malloc(sizeof(char **) * 1);
 	CHECK_ALLOCATION(opts.dirs, 1, 1);
