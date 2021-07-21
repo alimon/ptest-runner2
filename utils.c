@@ -323,11 +323,8 @@ read_child(void *arg)
 static inline void
 run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 {
-	char **argv = malloc(sizeof(char) * 2);
+	char *const argv[2] = {run_ptest, NULL};
 	chdir(dirname(strdup(run_ptest)));
-
-	argv[0] = run_ptest;
-	argv[1] = NULL;
 
 	dup2(fd_stdout, STDOUT_FILENO);
 	// XXX: Redirect stderr to stdout to avoid buffer ordering problems.
