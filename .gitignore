@@ -1,0 +1,3 @@
+*.o
+ptest-runner
+ptest-runner-test
