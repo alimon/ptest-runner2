@@ -1,10 +1,14 @@
 RELEASE=$(shell echo $$RELEASE)
 MEMCHECK=$(shell echo $$MEMCHECK)
 
-CC=cc
-CFLAGS=-std=gnu99 -pedantic -Wall -Werror -I .
-# CC=clang
-# CFLAGS=-std=gnu99 -Weverything -I .
+#CC=cc
+ifeq ($(CC),clang)
+        IMPL_CFLAGS += -std=gnu99 -Weverything -I .
+else
+        IMPL_CFLAGS += -std=gnu99 -pedantic -Wall -Werror -I .
+endif
+CFLAGS = ${IMPL_CFLAGS}
+
 ifeq ($(RELEASE), 1)
 CFLAGS+= -O2 -DRELEASE
 else
