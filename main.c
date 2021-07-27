@@ -84,7 +84,8 @@ str2array(char *str, const char *delim, int *num)
 	return array;
 }
 
-void cleanup_ptest_opts(struct ptest_options *opts)
+static void 
+cleanup_ptest_opts(struct ptest_options *opts)
 {
 	for (int i=0; i < opts->dirs_no; i++)
 		free(opts->dirs[i]);
@@ -144,7 +145,7 @@ main(int argc, char *argv[])
 				opts.list = 1;
 			break;
 			case 't':
-				opts.timeout = atoi(optarg);
+				opts.timeout = (unsigned int) atoi(optarg);
 			break;
 			case 'h':
 				print_usage(stdout, argv[0]);

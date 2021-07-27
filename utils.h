@@ -36,9 +36,10 @@
 struct ptest_options {
 	char **dirs;
 	int dirs_no;
+	int padding1;
 	char **exclude;
 	int list;
-	int timeout;
+	unsigned int timeout;
 	char **ptests;
 	char *xml_filename;
 };

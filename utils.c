@@ -54,13 +54,16 @@
 #define WAIT_CHILD_POLL_TIMEOUT_MS 200
 #define WAIT_CHILD_BUF_MAX_SIZE 1024
 
+#define UNUSED(x) (void)(x)
+
 static struct {
 	int fds[2];
 	FILE *fps[2];
 
-	int timeout;
+	unsigned int timeout;
 	int timeouted;
 	pid_t pid;
+	int padding1;
 } _child_reader;
 
 static inline char *
@@ -285,6 +288,8 @@ read_child(void *arg)
 	struct pollfd pfds[2];
 	int r;
 
+	UNUSED(arg);
+
 	pfds[0].fd = _child_reader.fds[0];
 	pfds[0].events = POLLIN;
 	pfds[1].fd = _child_reader.fds[1];
@@ -342,12 +347,13 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 static void
 timeout_child_handler(int signo)
 {
+	UNUSED(signo);
 	_child_reader.timeouted = 1;
 	kill(-_child_reader.pid, SIGKILL);
 }
 
 static inline int
-wait_child(pid_t pid, int timeout)
+wait_child(pid_t pid, unsigned int timeout)
 {
 	int status = -1;
 

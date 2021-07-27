@@ -73,7 +73,7 @@ find_word(int *found, const char *line, const char *word)
 	free(pivot);
 }
 
-static void test_ptest_expected_failure(struct ptest_list *, const int, char *,
+static void test_ptest_expected_failure(struct ptest_list *, const unsigned int, char *,
 	void (*h_analyzer)(const int, FILE *));
 
 START_TEST(test_get_available_ptests)
@@ -223,7 +223,7 @@ search_for_timeout_and_duration(const int rp, FILE *fp_stdout)
 START_TEST(test_run_timeout_duration_ptest)
 {
 	struct ptest_list *head = get_available_ptests(opts_directory);
-	int timeout = 1;
+	unsigned int timeout = 1;
 
 	test_ptest_expected_failure(head, timeout, "hang", search_for_timeout_and_duration);
 
@@ -251,7 +251,7 @@ search_for_fail(const int rp, FILE *fp_stdout)
 START_TEST(test_run_fail_ptest)
 {
 	struct ptest_list *head = get_available_ptests(opts_directory);
-	int timeout = 1;
+	unsigned int timeout = 1;
 
 	test_ptest_expected_failure(head, timeout, "fail", search_for_fail);
 
@@ -327,7 +327,7 @@ utils_suite(void)
 }
 
 static void
-test_ptest_expected_failure(struct ptest_list *head, const int timeout, char *progname,
+test_ptest_expected_failure(struct ptest_list *head, const unsigned int timeout, char *progname,
 		void (*h_analyzer)(const int, FILE *))
 {
 	char *buf_stdout;
