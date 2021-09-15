@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <stdbool.h>
 
 #include <check.h>
 
@@ -61,16 +62,13 @@ static char *ptests_not_found[] = {
 
 static struct ptest_options EmptyOpts;
 
-static inline void
-find_word(int *found, const char *line, const char *word)
+static inline bool
+find_word(const char *line, const char *word)
 {
-
-	char *pivot = NULL;
-
-	pivot = strdup(line);
-	pivot[strlen(word)] = '\0';
-	if (strcmp(pivot, word) == 0) { *found = 1; }
-	free(pivot);
+	if (strncmp(line, word, strlen(word)) == 0)
+                return true;
+        else
+                return false;
 }
 
 static void test_ptest_expected_failure(struct ptest_list *, const unsigned int, char *,
@@ -206,18 +204,19 @@ search_for_timeout_and_duration(const int rp, FILE *fp_stdout)
 	const char *timeout_str = "TIMEOUT";
 	const char *duration_str = "DURATION";
 	char line_buf[PRINT_PTEST_BUF_SIZE];
-	int found_timeout = 0, found_duration = 0;
+	bool found_timeout = false, found_duration = false;
 	char *line = NULL;
 
 	ck_assert(rp != 0);
 
 	while ((line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stdout)) != NULL) {
-		find_word(&found_timeout, line, timeout_str);
-		find_word(&found_duration, line, duration_str);
+		// once true, stay true
+		found_timeout = found_timeout ? found_timeout : find_word(line, timeout_str);
+		found_duration = found_duration ? found_duration : find_word(line, duration_str);
 	}
 
-	ck_assert(found_timeout == 1);
-	ck_assert(found_duration == 1);
+	ck_assert(found_timeout == true);
+	ck_assert(found_duration == true);
 }
 
 START_TEST(test_run_timeout_duration_ptest)
@@ -236,16 +235,18 @@ search_for_fail(const int rp, FILE *fp_stdout)
 {
         const char *fail_str = "ERROR: Exit status is 10";
         char line_buf[PRINT_PTEST_BUF_SIZE];
-        int found_fail = 0;
+        int found_fail = false;
         char *line = NULL;
 
         ck_assert(rp != 0);
 
         while ((line = fgets(line_buf, PRINT_PTEST_BUF_SIZE, fp_stdout)) != NULL) {
-		find_word(&found_fail, line, fail_str);
+		found_fail = find_word(line, fail_str);
+		if (found_fail == true)
+			break;
         }
 
-        ck_assert(found_fail == 1);
+        ck_assert(found_fail == true);
 }
 
 START_TEST(test_run_fail_ptest)
