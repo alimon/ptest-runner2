@@ -281,6 +281,27 @@ close_fds(void)
    	}
 }
 
+static void
+collect_system_state(FILE* fout)
+{
+	char *cmd = "ptest-runner-collect-system-data";
+
+	char buf[1024];
+	FILE *fp;
+
+	if ((fp = popen(cmd, "r")) == NULL) {
+		fprintf(fout, "Error opening pipe!\n");
+	}
+
+	while (fgets(buf, 1024, fp) != NULL) {
+		fprintf(fout, "%s", buf);
+	}
+
+	if(pclose(fp))  {
+		fprintf(fout, "Command not found or exited with error status\n");
+	}
+}
+
 static void *
 read_child(void *arg)
 {
@@ -313,6 +334,9 @@ read_child(void *arg)
 			}
 
 		} else if (r == 0) {
+			// no output from the test after a timeout; the test is stuck, so collect
+			// as much data from the system as possible and kill the test
+			collect_system_state(_child_reader.fps[0]);
 			_child_reader.timeouted = 1;
 			kill(-_child_reader.pid, SIGKILL);
                 }

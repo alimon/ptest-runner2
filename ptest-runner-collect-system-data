@@ -1,0 +1,6 @@
+#!/bin/sh
+# Other ideas on what to do when a ptest gets stuck welcome.
+dmesg
+pstree -a -l
+df
+free
