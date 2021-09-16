@@ -51,7 +51,6 @@
 #include "utils.h"
 
 #define GET_STIME_BUF_SIZE 1024
-#define WAIT_CHILD_POLL_TIMEOUT_MS 200
 #define WAIT_CHILD_BUF_MAX_SIZE 1024
 
 #define UNUSED(x) (void)(x)
@@ -296,7 +295,7 @@ read_child(void *arg)
 	pfds[1].events = POLLIN;
 
 	do {
-		r = poll(pfds, 2, WAIT_CHILD_POLL_TIMEOUT_MS);
+		r = poll(pfds, 2, _child_reader.timeout*1000);
 		if (r > 0) {
 			char buf[WAIT_CHILD_BUF_MAX_SIZE];
 			ssize_t n;
@@ -313,10 +312,10 @@ read_child(void *arg)
 					fwrite(buf, (size_t)n, 1, _child_reader.fps[1]);
 			}
 
-			/* Child output reset alarm */
-			alarm(0);
-			alarm(_child_reader.timeout);
-		}
+		} else if (r == 0) {
+			_child_reader.timeouted = 1;
+			kill(-_child_reader.pid, SIGKILL);
+                }
 
 		fflush(_child_reader.fps[0]);
 		fflush(_child_reader.fps[1]);
@@ -344,25 +343,10 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 	/* exit(1); not needed? */
 }
 
-static void
-timeout_child_handler(int signo)
-{
-	UNUSED(signo);
-	_child_reader.timeouted = 1;
-	kill(-_child_reader.pid, SIGKILL);
-}
-
 static inline int
-wait_child(pid_t pid, unsigned int timeout)
+wait_child(pid_t pid)
 {
 	int status = -1;
-
-	_child_reader.timeout = timeout;
-	_child_reader.timeouted = 0;
-	_child_reader.pid = pid;
-
-	/* setup alarm to timeout based on std{out,err} in the child */
-	alarm(timeout);
 
 	waitpid(pid, &status, 0);
 	if (WIFEXITED(status))
@@ -462,6 +446,8 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 		_child_reader.fds[1] = pipefd_stderr[0];
 		_child_reader.fps[0] = fp;
 		_child_reader.fps[1] = fp_stderr;
+		_child_reader.timeout = opts.timeout;
+		_child_reader.timeouted = 0;
 		rc = pthread_create(&tid, NULL, read_child, NULL);
 		if (rc != 0) {
 			fprintf(fp, "ERROR: Failed to create reader thread, %s\n", strerror(errno));
@@ -469,7 +455,6 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			close(pipefd_stdout[1]);
 			break;
 		}
-		signal(SIGALRM, timeout_child_handler);
 
 		fprintf(fp, "START: %s\n", progname);
 		PTEST_LIST_ITERATE_START(head, p)
@@ -511,6 +496,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			} else {
 				int status;
 
+				_child_reader.pid = child;
 				if (setpgid(child, pgid) == -1) {
 					fprintf(fp, "ERROR: setpgid() failed, %s\n", strerror(errno));
 				}
@@ -520,7 +506,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
 
-				status = wait_child(child, opts.timeout);
+				status = wait_child(child);
 
 				entime = time(NULL);
 				duration = entime - sttime;
