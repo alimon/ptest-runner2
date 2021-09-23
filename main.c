@@ -219,6 +219,9 @@ main(int argc, char *argv[])
 		ptest_list_remove(run, opts.exclude[i], 1);
 
 	rc = run_ptests(run, opts, argv[0], stdout, stderr);
+	fprintf(stdout, "TOTAL: %d FAIL: %d\n", ptest_list_length(run), rc);
+	if (rc > 0)
+		rc = 1;
 
 	ptest_list_free_all(run);
 
