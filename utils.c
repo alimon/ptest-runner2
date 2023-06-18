@@ -535,6 +535,9 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				entime = time(NULL);
 				duration = entime - sttime;
 
+				/* Now the child has exited, ensure buffers are in sync before writing */
+				fflush(NULL);
+
 				if (status) {
 					fprintf(fp, "\nERROR: Exit status is %d\n", status);
 					rc += 1;
