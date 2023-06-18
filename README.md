@@ -49,8 +49,7 @@ $ mtrace ./ptest-runner $MALLOC_TRACE
 ## Contributions
 
 For contribute please send a patch with subject prefix "[ptest-runner]" to 
-yocto@yoctoproject.org and cc the current maintainer that is Aníbal Limón 
-<anibal.limon@linaro.org>.
+yocto@yoctoproject.org.
 
 ## Links
 
