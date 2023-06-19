@@ -63,6 +63,7 @@ static struct {
 	int timeouted;
 	pid_t pid;
 	int padding1;
+	pthread_mutex_t fd_lock;
 } _child_reader;
 
 static inline char *
@@ -317,12 +318,13 @@ read_child(void *arg)
 
 	do {
 		r = poll(pfds, 2, _child_reader.timeout*1000);
+		pthread_mutex_lock(&_child_reader.fd_lock);
 		if (r > 0) {
 			char buf[WAIT_CHILD_BUF_MAX_SIZE];
 			ssize_t n;
 
 			if (pfds[0].revents != 0) {
-				n = read(_child_reader.fds[0], buf, WAIT_CHILD_BUF_MAX_SIZE);
+ 				n = read(_child_reader.fds[0], buf, WAIT_CHILD_BUF_MAX_SIZE);
 				if (n > 0)
 					fwrite(buf, (size_t)n, 1, _child_reader.fps[0]);
 			}
@@ -338,11 +340,13 @@ read_child(void *arg)
 			// as much data from the system as possible and kill the test
 			collect_system_state(_child_reader.fps[0]);
 			_child_reader.timeouted = 1;
+			pthread_mutex_unlock(&_child_reader.fd_lock);
 			kill(-_child_reader.pid, SIGKILL);
                 }
 
 		fflush(_child_reader.fps[0]);
 		fflush(_child_reader.fps[1]);
+		pthread_mutex_unlock(&_child_reader.fd_lock);
 	} while (1);
 
 	return NULL;
@@ -444,6 +448,8 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	int slave;
 	int pgid = -1;
 	pthread_t tid;
+	ssize_t n;
+	char buf[WAIT_CHILD_BUF_MAX_SIZE];
 
 	if (opts.xml_filename) {
 		xh = xml_create(ptest_list_length(head), opts.xml_filename);
@@ -453,10 +459,10 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 	do
 	{
-		if ((rc = pipe(pipefd_stdout)) == -1)
+		if ((rc = pipe2(pipefd_stdout, O_NONBLOCK)) == -1)
 			break;
 
-		if ((rc = pipe(pipefd_stderr)) == -1) {
+		if ((rc = pipe2(pipefd_stderr, O_NONBLOCK)) == -1) {
 			close(pipefd_stdout[0]);
 			close(pipefd_stdout[1]);
 			break;
@@ -464,6 +470,11 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 		if (isatty(0) && ioctl(0, TIOCNOTTY) == -1) {
 			fprintf(fp, "ERROR: Unable to detach from controlling tty, %s\n", strerror(errno));
+		}
+
+ 		if (pthread_mutex_init(&_child_reader.fd_lock, NULL) != 0) {
+			printf("Failed to init mutex\n");
+			exit(EXIT_FAILURE);
 		}
 
 		_child_reader.fds[0] = pipefd_stdout[0];
@@ -535,8 +546,13 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				entime = time(NULL);
 				duration = entime - sttime;
 
-				/* Now the child has exited, ensure buffers are in sync before writing */
+				pthread_mutex_lock(&_child_reader.fd_lock);
+				while ((n = read(_child_reader.fds[0], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0)
+					fwrite(buf, (size_t)n, 1, _child_reader.fps[0]);
+				while ((n = read(_child_reader.fds[1], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0)
+					fwrite(buf, (size_t)n, 1, _child_reader.fps[1]);
 				fflush(NULL);
+				pthread_mutex_unlock(&_child_reader.fd_lock);
 
 				if (status) {
 					fprintf(fp, "\nERROR: Exit status is %d\n", status);
@@ -558,6 +574,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 		pthread_cancel(tid);
 		pthread_join(tid, NULL);
+		pthread_mutex_destroy(&_child_reader.fd_lock);
 
 		close(pipefd_stdout[0]); close(pipefd_stdout[1]);
 		close(pipefd_stderr[0]); close(pipefd_stderr[1]);
