@@ -39,7 +39,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <pthread.h>
+#include <stdbool.h>
 
 #include <sys/ioctl.h>
 #include <sys/resource.h>
@@ -63,7 +63,6 @@ static struct {
 	int timeouted;
 	pid_t pid;
 	int padding1;
-	pthread_mutex_t fd_lock;
 } _child_reader;
 
 static inline char *
@@ -85,6 +84,29 @@ check_allocation1(void *p, size_t size, char *file, int line, int exit_on_null)
 				" line %d.\n", size, file, line);
 		if (exit_on_null)
 			exit(1);
+	}
+}
+
+static void
+set_nonblocking(int fd)
+{
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags < 0) {
+		fprintf(stderr, "Unable to get flags for FD %d: %s\n", fd, strerror(errno));
+		return;
+	}
+
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+		fprintf(stderr, "Unable to set flags for FD %d: %s\n", fd, strerror(errno));
+	}
+}
+
+static void
+do_close(int *fd)
+{
+	if (*fd >= 0) {
+		close(*fd);
+		*fd = -1;
 	}
 }
 
@@ -227,7 +249,7 @@ filter_ptests(struct ptest_list *head, char **ptests, int ptest_num)
 		}
 
 		head_new = ptest_list_alloc();
-		if (head_new == NULL) 
+		if (head_new == NULL)
 			break;
 
 		for (i = 0; i < ptest_num; i++) {
@@ -259,7 +281,7 @@ filter_ptests(struct ptest_list *head, char **ptests, int ptest_num)
 		if (fail) {
 			PTEST_LIST_FREE_ALL_CLEAN(head_new);
 			errno = saved_errno;
-		} 
+		}
 	} while (0);
 
 	return head_new;
@@ -269,7 +291,7 @@ filter_ptests(struct ptest_list *head, char **ptests, int ptest_num)
  * i.e. do not close STDIN, STDOUT, STDERR.
  * Typically called in in a child process after forking
  * but before exec as a good policy especially for security.
- */ 
+ */
 static void
 close_fds(void)
 {
@@ -301,55 +323,6 @@ collect_system_state(FILE* fout)
 	if(pclose(fp))  {
 		fprintf(fout, "Command not found or exited with error status\n");
 	}
-}
-
-static void *
-read_child(void *arg)
-{
-	struct pollfd pfds[2];
-	int r;
-
-	UNUSED(arg);
-
-	pfds[0].fd = _child_reader.fds[0];
-	pfds[0].events = POLLIN;
-	pfds[1].fd = _child_reader.fds[1];
-	pfds[1].events = POLLIN;
-
-	do {
-		r = poll(pfds, 2, _child_reader.timeout*1000);
-		pthread_mutex_lock(&_child_reader.fd_lock);
-		if (r > 0) {
-			char buf[WAIT_CHILD_BUF_MAX_SIZE];
-			ssize_t n;
-
-			if (pfds[0].revents != 0) {
- 				n = read(_child_reader.fds[0], buf, WAIT_CHILD_BUF_MAX_SIZE);
-				if (n > 0)
-					fwrite(buf, (size_t)n, 1, _child_reader.fps[0]);
-			}
-
-			if (pfds[1].revents != 0) {
-				n = read(_child_reader.fds[1], buf, WAIT_CHILD_BUF_MAX_SIZE);
-				if (n > 0)
-					fwrite(buf, (size_t)n, 1, _child_reader.fps[1]);
-			}
-
-		} else if (r == 0) {
-			// no output from the test after a timeout; the test is stuck, so collect
-			// as much data from the system as possible and kill the test
-			collect_system_state(_child_reader.fps[0]);
-			_child_reader.timeouted = 1;
-			pthread_mutex_unlock(&_child_reader.fd_lock);
-			kill(-_child_reader.pid, SIGKILL);
-                }
-
-		fflush(_child_reader.fps[0]);
-		fflush(_child_reader.fps[1]);
-		pthread_mutex_unlock(&_child_reader.fd_lock);
-	} while (1);
-
-	return NULL;
 }
 
 static inline void
@@ -389,7 +362,7 @@ wait_child(pid_t pid)
  * fp should be writable, likely stdout/err.
  */
 static int
-setup_slave_pty(FILE *fp) { 
+setup_slave_pty(FILE *fp) {
 	int pty_master = -1;
 	int pty_slave = -1;
 	char pty_name[256];
@@ -447,9 +420,6 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	time_t duration;
 	int slave;
 	int pgid = -1;
-	pthread_t tid;
-	ssize_t n;
-	char buf[WAIT_CHILD_BUF_MAX_SIZE];
 
 	if (opts.xml_filename) {
 		xh = xml_create(ptest_list_length(head), opts.xml_filename);
@@ -459,10 +429,10 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 	do
 	{
-		if ((rc = pipe2(pipefd_stdout, O_NONBLOCK)) == -1)
+		if ((rc = pipe2(pipefd_stdout, 0)) == -1)
 			break;
 
-		if ((rc = pipe2(pipefd_stderr, O_NONBLOCK)) == -1) {
+		if ((rc = pipe2(pipefd_stderr, 0)) == -1) {
 			close(pipefd_stdout[0]);
 			close(pipefd_stdout[1]);
 			break;
@@ -472,24 +442,12 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			fprintf(fp, "ERROR: Unable to detach from controlling tty, %s\n", strerror(errno));
 		}
 
- 		if (pthread_mutex_init(&_child_reader.fd_lock, NULL) != 0) {
-			printf("Failed to init mutex\n");
-			exit(EXIT_FAILURE);
-		}
-
 		_child_reader.fds[0] = pipefd_stdout[0];
 		_child_reader.fds[1] = pipefd_stderr[0];
 		_child_reader.fps[0] = fp;
 		_child_reader.fps[1] = fp_stderr;
 		_child_reader.timeout = opts.timeout;
 		_child_reader.timeouted = 0;
-		rc = pthread_create(&tid, NULL, read_child, NULL);
-		if (rc != 0) {
-			fprintf(fp, "ERROR: Failed to create reader thread, %s\n", strerror(errno));
-			close(pipefd_stdout[0]);
-			close(pipefd_stdout[1]);
-			break;
-		}
 
 		fprintf(fp, "START: %s\n", progname);
 		PTEST_LIST_ITERATE_START(head, p)
@@ -511,6 +469,10 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				break;
 			} else if (child == 0) {
 				close(0);
+				/* Close read ends of the pipe */
+				do_close(&pipefd_stdout[0]);
+				do_close(&pipefd_stderr[0]);
+
 				if ((slave = setup_slave_pty(fp)) < 0) {
 					fprintf(fp, "ERROR: could not setup pty (%d).", slave);
 				}
@@ -531,6 +493,10 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			} else {
 				int status;
 
+				/* Close write ends of the pipe, otherwise this process will never get EOF when the child dies */
+				do_close(&pipefd_stdout[1]);
+				do_close(&pipefd_stderr[1]);
+
 				_child_reader.pid = child;
 				if (setpgid(child, pgid) == -1) {
 					fprintf(fp, "ERROR: setpgid() failed, %s\n", strerror(errno));
@@ -540,19 +506,91 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, sttime));
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
+				set_nonblocking(_child_reader.fds[0]);
+				set_nonblocking(_child_reader.fds[1]);
 
+				struct pollfd pfds[2];
+				for (int i = 0; i < 2; i++) {
+					pfds[i].fd = _child_reader.fds[i];
+					pfds[i].events = POLLIN;
+				}
+
+				while (true) {
+					/*
+					 * Check all the poll file descriptors.
+					 * Only when all of them are done
+					 * (negative) will we exit the poll()
+					 * loop
+					 */
+					bool done = true;
+					for (int i = 0; i < 2; i++) {
+						if (pfds[i].fd >= 0) {
+							done = false;
+							break;
+						}
+					}
+
+					if (done) {
+						break;
+					}
+
+					int ret = poll(pfds, 2, _child_reader.timeout*1000);
+
+					if (ret == 0 && !_child_reader.timeouted) {
+						/* kill the child if we haven't
+						 * already. Note that we
+						 * continue to read data from
+						 * the pipes until EOF to make
+						 * sure we get all the output
+						 */
+						kill(-_child_reader.pid, SIGKILL);
+						_child_reader.timeouted = 1;
+					}
+
+					for (int i = 0; i < 2; i++) {
+						if (pfds[i].revents & (POLLIN | POLLHUP)) {
+							char buf[WAIT_CHILD_BUF_MAX_SIZE];
+							ssize_t n = read(pfds[i].fd, buf, sizeof(buf));
+
+							if (n == 0) {
+								/* Closed */
+								pfds[i].fd = -1;
+								continue;
+							}
+
+							if (n < 0) {
+								if (errno != EAGAIN && errno != EWOULDBLOCK) {
+									pfds[i].fd = -1;
+									fprintf(stderr, "Error reading from stream %d: %s\n", i, strerror(errno));
+								}
+								continue;
+							} else {
+								fwrite(buf, (size_t)n, 1, _child_reader.fps[i]);
+							}
+						}
+					}
+				}
+				collect_system_state(_child_reader.fps[0]);
+
+				for (int i = 0; i < 2; i++) {
+					fflush(_child_reader.fps[i]);
+				}
+
+				/*
+				 * This kill is just in case the child did
+				 * something really silly like close its
+				 * stdout and stderr but then go into an
+				 * infinite loop and never exit. Normally, it
+				 * will just fail because the child is already
+				 * dead
+				 */
+				if (!_child_reader.timeouted) {
+					kill(-_child_reader.pid, SIGKILL);
+				}
 				status = wait_child(child);
 
 				entime = time(NULL);
 				duration = entime - sttime;
-
-				pthread_mutex_lock(&_child_reader.fd_lock);
-				while ((n = read(_child_reader.fds[0], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0)
-					fwrite(buf, (size_t)n, 1, _child_reader.fps[0]);
-				while ((n = read(_child_reader.fds[1], buf, WAIT_CHILD_BUF_MAX_SIZE)) > 0)
-					fwrite(buf, (size_t)n, 1, _child_reader.fps[1]);
-				fflush(NULL);
-				pthread_mutex_unlock(&_child_reader.fd_lock);
 
 				if (status) {
 					fprintf(fp, "\nERROR: Exit status is %d\n", status);
@@ -572,15 +610,13 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 		PTEST_LIST_ITERATE_END
 		fprintf(fp, "STOP: %s\n", progname);
 
-		pthread_cancel(tid);
-		pthread_join(tid, NULL);
-		pthread_mutex_destroy(&_child_reader.fd_lock);
-
-		close(pipefd_stdout[0]); close(pipefd_stdout[1]);
-		close(pipefd_stderr[0]); close(pipefd_stderr[1]);
+		do_close(&pipefd_stdout[0]);
+		do_close(&pipefd_stdout[1]);
+		do_close(&pipefd_stderr[0]);
+		do_close(&pipefd_stderr[1]);
 	} while (0);
 
-	if (rc == -1) 
+	if (rc == -1)
 		fprintf(fp_stderr, "run_ptests fails: %s", strerror(errno));
 
 	if (opts.xml_filename)
@@ -598,8 +634,8 @@ xml_create(int test_count, char *xml_filename)
 		fprintf(xh, "<?xml version='1.0' encoding='UTF-8'?>\n");
 		fprintf(xh, "<testsuite name='ptest' tests='%d'>\n", test_count);
 	} else {
-		fprintf(stderr, "XML File could not be created. %s.\n",
-				strerror(errno));
+		fprintf(stderr, "XML File '%s' could not be created. %s.\n",
+				xml_filename, strerror(errno));
 		return NULL;
 	}
 
