@@ -3,5 +3,6 @@
 echo "hang" 1>&2
 echo "hang"
 while true; do
+	echo "hang"
 	sleep 1
 done
