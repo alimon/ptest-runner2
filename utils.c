@@ -60,19 +60,10 @@ static struct {
 	FILE *fps[2];
 
 	unsigned int timeout;
+	int timeouted;
+	pid_t pid;
 	int padding1;
 } _child_reader;
-
-struct running_test {
-	struct running_test *next;
-	char *ptest_dir;
-	pid_t pid;
-	time_t start_time;
-	time_t end_time;
-	int status;
-	bool timed_out;
-	bool exited;
-};
 
 static inline char *
 get_stime(char *stime, size_t size, time_t t)
@@ -353,18 +344,16 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 	/* exit(1); not needed? */
 }
 
-static void
-wait_child(struct running_test *test, int options)
+static inline int
+wait_child(pid_t pid)
 {
-	int status;
+	int status = -1;
 
-	if (!test->exited) {
-		if (waitpid(test->pid, &status, options) == test->pid) {
-			test->status = status;
-			test->end_time = time(NULL);
-			test->exited = true;
-		}
-	}
+	waitpid(pid, &status, 0);
+	if (WIFEXITED(status))
+		status = WEXITSTATUS(status);
+
+	return status;
 }
 
 /* Returns an integer file descriptor.
@@ -427,9 +416,10 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	pid_t child;
 	int pipefd_stdout[2];
 	int pipefd_stderr[2];
+	time_t sttime, entime;
+	time_t duration;
 	int slave;
 	int pgid = -1;
-	struct running_test *running_tests = NULL;
 
 	if (opts.xml_filename) {
 		xh = xml_create(ptest_list_length(head), opts.xml_filename);
@@ -457,6 +447,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 		_child_reader.fps[0] = fp;
 		_child_reader.fps[1] = fp_stderr;
 		_child_reader.timeout = opts.timeout;
+		_child_reader.timeouted = 0;
 
 		fprintf(fp, "START: %s\n", progname);
 		PTEST_LIST_ITERATE_START(head, p)
@@ -500,158 +491,123 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				run_child(p->run_ptest, pipefd_stdout[1], pipefd_stderr[1]);
 
 			} else {
-				struct running_test *test = malloc(sizeof(*test));
-				test->pid = child;
-				test->status = 0;
-				test->timed_out = false;
-				test->exited = false;
-				test->ptest_dir = ptest_dir;
-				test->start_time = time(NULL);
-				test->next = running_tests;
-				running_tests = test;
+				int status;
 
+				/* Close write ends of the pipe, otherwise this process will never get EOF when the child dies */
+				do_close(&pipefd_stdout[1]);
+				do_close(&pipefd_stderr[1]);
+
+				_child_reader.pid = child;
 				if (setpgid(child, pgid) == -1) {
 					fprintf(fp, "ERROR: setpgid() failed, %s\n", strerror(errno));
 				}
 
-				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, test->start_time));
+				sttime = time(NULL);
+				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, sttime));
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
-			}
-		PTEST_LIST_ITERATE_END
 
-		/*
-		 * Close write ends of the pipe, otherwise this process will
-		 * never get EOF when the child dies
-		 */
-		do_close(&pipefd_stdout[1]);
-		do_close(&pipefd_stderr[1]);
+				set_nonblocking(_child_reader.fds[0]);
+				set_nonblocking(_child_reader.fds[1]);
 
-		set_nonblocking(_child_reader.fds[0]);
-		set_nonblocking(_child_reader.fds[1]);
-
-		struct pollfd pfds[2];
-		for (int i = 0; i < 2; i++) {
-			pfds[i].fd = _child_reader.fds[i];
-			pfds[i].events = POLLIN;
-		}
-
-		while (true) {
-			/*
-			 * Check all the poll file descriptors. Only when all
-			 * of them are done (negative) will the poll() loop
-			 * exit. This ensures all output is read from all
-			 * children.
-			 */
-			bool done = true;
-			for (int i = 0; i < 2; i++) {
-				if (pfds[i].fd >= 0) {
-					done = false;
-					break;
+				struct pollfd pfds[2];
+				for (int i = 0; i < 2; i++) {
+					pfds[i].fd = _child_reader.fds[i];
+					pfds[i].events = POLLIN;
 				}
-			}
 
-			if (done) {
-				break;
-			}
-
-			int ret = poll(pfds, 2, _child_reader.timeout*1000);
-
-			for (int i = 0; i < 2; i++) {
-				if (pfds[i].revents & (POLLIN | POLLHUP)) {
-					char buf[WAIT_CHILD_BUF_MAX_SIZE];
-					ssize_t n = read(pfds[i].fd, buf, sizeof(buf));
-
-					if (n == 0) {
-						/* Closed */
-						pfds[i].fd = -1;
-						continue;
-					}
-
-					if (n < 0) {
-						if (errno != EAGAIN && errno != EWOULDBLOCK) {
-							pfds[i].fd = -1;
-							fprintf(stderr, "Error reading from stream %d: %s\n", i, strerror(errno));
+				while (true) {
+					/*
+					 * Check all the poll file descriptors.
+					 * Only when all of them are done
+					 * (negative) will we exit the poll()
+					 * loop
+					 */
+					bool done = true;
+					for (int i = 0; i < 2; i++) {
+						if (pfds[i].fd >= 0) {
+							done = false;
+							break;
 						}
-						continue;
-					} else {
-						fwrite(buf, (size_t)n, 1, _child_reader.fps[i]);
+					}
+
+					if (done) {
+						break;
+					}
+
+					int ret = poll(pfds, 2, _child_reader.timeout*1000);
+
+					if (ret == 0 && !_child_reader.timeouted) {
+						/* kill the child if we haven't
+						 * already. Note that we
+						 * continue to read data from
+						 * the pipes until EOF to make
+						 * sure we get all the output
+						 */
+						kill(-_child_reader.pid, SIGKILL);
+						_child_reader.timeouted = 1;
+					}
+
+					for (int i = 0; i < 2; i++) {
+						if (pfds[i].revents & (POLLIN | POLLHUP)) {
+							char buf[WAIT_CHILD_BUF_MAX_SIZE];
+							ssize_t n = read(pfds[i].fd, buf, sizeof(buf));
+
+							if (n == 0) {
+								/* Closed */
+								pfds[i].fd = -1;
+								continue;
+							}
+
+							if (n < 0) {
+								if (errno != EAGAIN && errno != EWOULDBLOCK) {
+									pfds[i].fd = -1;
+									fprintf(stderr, "Error reading from stream %d: %s\n", i, strerror(errno));
+								}
+								continue;
+							} else {
+								fwrite(buf, (size_t)n, 1, _child_reader.fps[i]);
+							}
+						}
 					}
 				}
-			}
+				collect_system_state(_child_reader.fps[0]);
 
-			for (struct running_test *test = running_tests; test; test = test->next) {
-				/*
-				 * Check if this child has exited yet.
-				 */
-				wait_child(test, WNOHANG);
-
-				/*
-				 * If a timeout has occurred, kill the child if
-				 * it has not been done already and has not
-				 * exited
-				 */
-				if (ret == 0 && !test->exited && !test->timed_out) {
-					kill(-test->pid, SIGKILL);
-					test->timed_out = true;
+				for (int i = 0; i < 2; i++) {
+					fflush(_child_reader.fps[i]);
 				}
-			}
-		}
-		collect_system_state(_child_reader.fps[0]);
 
-		for (int i = 0; i < 2; i++) {
-			fflush(_child_reader.fps[i]);
-		}
+				/*
+				 * This kill is just in case the child did
+				 * something really silly like close its
+				 * stdout and stderr but then go into an
+				 * infinite loop and never exit. Normally, it
+				 * will just fail because the child is already
+				 * dead
+				 */
+				if (!_child_reader.timeouted) {
+					kill(-_child_reader.pid, SIGKILL);
+				}
+				status = wait_child(child);
 
-		for (struct running_test *test = running_tests; test; test = test->next) {
-			time_t duration;
-			int exit_code = 0;
+				entime = time(NULL);
+				duration = entime - sttime;
 
-			/*
-			 * This kill is just in case the child did something really
-			 * silly like close its stdout and stderr but then go into an
-			 * infinite loop and never exit. Normally, it will just fail
-			 * because the child is already dead
-			 */
-			if (!test->timed_out && !test->exited) {
-				kill(-test->pid, SIGKILL);
-			}
-
-			wait_child(test, 0);
-
-			duration = test->end_time - test->start_time;
-
-			if (WIFEXITED(test->status)) {
-				exit_code = WEXITSTATUS(test->status);
-				if (exit_code) {
-					fprintf(fp, "\nERROR: Exit status is %d\n", exit_code);
+				if (status) {
+					fprintf(fp, "\nERROR: Exit status is %d\n", status);
 					rc += 1;
 				}
-			} else if (WIFSIGNALED(test->status) && !test->timed_out) {
-				int signal = WTERMSIG(test->status);
-				fprintf(fp, "\nERROR: Exited with signal %s (%d)\n", strsignal(signal), signal);
-				rc += 1;
+				fprintf(fp, "DURATION: %d\n", (int) duration);
+				if (_child_reader.timeouted)
+					fprintf(fp, "TIMEOUT: %s\n", ptest_dir);
+
+				if (opts.xml_filename)
+					xml_add_case(xh, status, ptest_dir, _child_reader.timeouted, (int) duration);
+
+				fprintf(fp, "END: %s\n", ptest_dir);
+				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, entime));
 			}
-			fprintf(fp, "DURATION: %d\n", (int) duration);
-			if (test->timed_out) {
-				fprintf(fp, "TIMEOUT: %s\n", test->ptest_dir);
-				rc += 1;
-			}
-
-			if (opts.xml_filename)
-				xml_add_case(xh, exit_code, test->ptest_dir, test->timed_out, (int) duration);
-
-			fprintf(fp, "END: %s\n", test->ptest_dir);
-			fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, test->end_time));
-		}
-
-		while (running_tests) {
-			struct running_test *test = running_tests;
-			running_tests = running_tests->next;
-
-			free(test->ptest_dir);
-			free(test);
-		}
-
+			free(ptest_dir);
+		PTEST_LIST_ITERATE_END
 		fprintf(fp, "STOP: %s\n", progname);
 
 		do_close(&pipefd_stdout[0]);
