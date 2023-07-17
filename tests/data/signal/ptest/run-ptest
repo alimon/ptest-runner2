@@ -1,0 +1,10 @@
+#!/bin/sh
+
+echo "signal" 1>&2
+echo "signal"
+
+kill -ABRT $$
+
+while true; do
+	sleep 1
+done

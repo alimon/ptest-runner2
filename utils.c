@@ -343,18 +343,6 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 	/* exit(1); not needed? */
 }
 
-static inline int
-wait_child(pid_t pid)
-{
-	int status = -1;
-
-	waitpid(pid, &status, 0);
-	if (WIFEXITED(status))
-		status = WEXITSTATUS(status);
-
-	return status;
-}
-
 /* Returns an integer file descriptor.
  * If it returns < 0, an error has occurred.
  * Otherwise, it has returned the slave pty file descriptor.
@@ -585,21 +573,37 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				if (!_child_reader.timeouted) {
 					kill(-child, SIGKILL);
 				}
-				status = wait_child(child);
+				waitpid(child, &status, 0);
 
 				entime = time(NULL);
 				duration = entime - sttime;
 
-				if (status) {
-					fprintf(fp, "\nERROR: Exit status is %d\n", status);
-					rc += 1;
+				int exit_code = 0;
+
+				if (!_child_reader.timeouted) {
+					if (WIFEXITED(status)) {
+						exit_code = WEXITSTATUS(status);
+						if (exit_code) {
+							fprintf(fp, "\nERROR: Exit status is %d\n", exit_code);
+							rc += 1;
+						}
+					} else if (WIFSIGNALED(status)) {
+						int signal = WTERMSIG(status);
+						fprintf(fp, "\nERROR: Exited from signal %s (%d)\n", strsignal(signal), signal);
+						rc += 1;
+					} else {
+						fprintf(fp, "\nERROR: Exited for unknown reason (%d)\n", status);
+						rc += 1;
+					}
 				}
 				fprintf(fp, "DURATION: %d\n", (int) duration);
-				if (_child_reader.timeouted)
+				if (_child_reader.timeouted) {
 					fprintf(fp, "TIMEOUT: %s\n", ptest_dir);
+					rc += 1;
+				}
 
 				if (opts.xml_filename)
-					xml_add_case(xh, status, ptest_dir, _child_reader.timeouted, (int) duration);
+					xml_add_case(xh, exit_code, ptest_dir, _child_reader.timeouted, (int) duration);
 
 				fprintf(fp, "END: %s\n", ptest_dir);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, entime));
