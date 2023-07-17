@@ -61,7 +61,6 @@ static struct {
 
 	unsigned int timeout;
 	int timeouted;
-	pid_t pid;
 	int padding1;
 } _child_reader;
 
@@ -414,8 +413,8 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	char stime[GET_STIME_BUF_SIZE];
 
 	pid_t child;
-	int pipefd_stdout[2];
-	int pipefd_stderr[2];
+	int pipefd_stdout[2] = {-1, -1};
+	int pipefd_stderr[2] = {-1, -1};
 	time_t sttime, entime;
 	time_t duration;
 	int slave;
@@ -429,28 +428,22 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 	do
 	{
-		if ((rc = pipe2(pipefd_stdout, 0)) == -1)
-			break;
-
-		if ((rc = pipe2(pipefd_stderr, 0)) == -1) {
-			close(pipefd_stdout[0]);
-			close(pipefd_stdout[1]);
-			break;
-		}
-
 		if (isatty(0) && ioctl(0, TIOCNOTTY) == -1) {
 			fprintf(fp, "ERROR: Unable to detach from controlling tty, %s\n", strerror(errno));
 		}
 
-		_child_reader.fds[0] = pipefd_stdout[0];
-		_child_reader.fds[1] = pipefd_stderr[0];
-		_child_reader.fps[0] = fp;
-		_child_reader.fps[1] = fp_stderr;
-		_child_reader.timeout = opts.timeout;
-		_child_reader.timeouted = 0;
 
 		fprintf(fp, "START: %s\n", progname);
 		PTEST_LIST_ITERATE_START(head, p)
+			if ((rc = pipe2(pipefd_stdout, 0)) == -1)
+				break;
+
+			if ((rc = pipe2(pipefd_stderr, 0)) == -1) {
+				close(pipefd_stdout[0]);
+				close(pipefd_stdout[1]);
+				break;
+			}
+
 			char *ptest_dir = strdup(p->run_ptest);
 			if (ptest_dir == NULL) {
 				rc = -1;
@@ -497,7 +490,12 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				do_close(&pipefd_stdout[1]);
 				do_close(&pipefd_stderr[1]);
 
-				_child_reader.pid = child;
+				_child_reader.fds[0] = pipefd_stdout[0];
+				_child_reader.fds[1] = pipefd_stderr[0];
+				_child_reader.fps[0] = fp;
+				_child_reader.fps[1] = fp_stderr;
+				_child_reader.timeout = opts.timeout;
+				_child_reader.timeouted = 0;
 				if (setpgid(child, pgid) == -1) {
 					fprintf(fp, "ERROR: setpgid() failed, %s\n", strerror(errno));
 				}
@@ -543,7 +541,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 						 * the pipes until EOF to make
 						 * sure we get all the output
 						 */
-						kill(-_child_reader.pid, SIGKILL);
+						kill(-child, SIGKILL);
 						_child_reader.timeouted = 1;
 					}
 
@@ -585,7 +583,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				 * dead
 				 */
 				if (!_child_reader.timeouted) {
-					kill(-_child_reader.pid, SIGKILL);
+					kill(-child, SIGKILL);
 				}
 				status = wait_child(child);
 
@@ -607,6 +605,11 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, entime));
 			}
 			free(ptest_dir);
+			do_close(&pipefd_stdout[0]);
+			do_close(&pipefd_stdout[1]);
+			do_close(&pipefd_stderr[0]);
+			do_close(&pipefd_stderr[1]);
+
 		PTEST_LIST_ITERATE_END
 		fprintf(fp, "STOP: %s\n", progname);
 
