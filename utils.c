@@ -403,8 +403,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	pid_t child;
 	int pipefd_stdout[2] = {-1, -1};
 	int pipefd_stderr[2] = {-1, -1};
-	time_t sttime, entime, now;
-	time_t timeout_deadline;
+	time_t sttime, entime;
 	time_t duration;
 	int slave;
 	int pgid = -1;
@@ -490,7 +489,6 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				}
 
 				sttime = time(NULL);
-				timeout_deadline = sttime + opts.timeout;
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, sttime));
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
@@ -521,17 +519,18 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 					if (done) {
 						break;
 					}
-					now = time(NULL);
-					if (now >= timeout_deadline) {
+
+					int ret = poll(pfds, 2, _child_reader.timeout*1000);
+
+					if (ret == 0 && !_child_reader.timeouted) {
+						/* kill the child if we haven't
+						 * already. Note that we
+						 * continue to read data from
+						 * the pipes until EOF to make
+						 * sure we get all the output
+						 */
 						kill(-child, SIGKILL);
 						_child_reader.timeouted = 1;
-						break;
-					}
-
-					int ret = poll(pfds, 2, (timeout_deadline - now) * 1000);
-
-					if (ret == 0) {
-						continue;
 					}
 
 					for (int i = 0; i < 2; i++) {

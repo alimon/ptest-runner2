@@ -224,7 +224,7 @@ search_for_timeout_and_duration(const int rp, FILE *fp_stdout)
 START_TEST(test_run_timeout_duration_ptest)
 {
 	struct ptest_list *head = get_available_ptests(opts_directory);
-	unsigned int timeout = 3;
+	unsigned int timeout = 1;
 
 	test_ptest_expected_failure(head, timeout, "hang", search_for_timeout_and_duration);
 
