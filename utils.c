@@ -556,21 +556,18 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 						}
 					}
 				}
-				collect_system_state(_child_reader.fps[0]);
 
-				for (int i = 0; i < 2; i++) {
-					fflush(_child_reader.fps[i]);
-				}
-
-				/*
-				 * This kill is just in case the child did
-				 * something really silly like close its
-				 * stdout and stderr but then go into an
-				 * infinite loop and never exit. Normally, it
-				 * will just fail because the child is already
-				 * dead
-				 */
-				if (!_child_reader.timeouted) {
+				if (_child_reader.timeouted) {
+					collect_system_state(fp);
+				} else {
+					/*
+					 * This kill is just in case the child did
+					 * something really silly like close its
+					 * stdout and stderr but then go into an
+					 * infinite loop and never exit. Normally, it
+					 * will just fail because the child is already
+					 * dead
+					 */
 					kill(-child, SIGKILL);
 				}
 				waitpid(child, &status, 0);
