@@ -55,14 +55,10 @@
 
 #define UNUSED(x) (void)(x)
 
-static struct {
-	int fds[2];
-	FILE *fps[2];
-
-	unsigned int timeout;
-	int timeouted;
-	int padding1;
-} _child_reader;
+enum {
+	PIPE_READ = 0,
+	PIPE_WRITE = 1,
+};
 
 static inline char *
 get_stime(char *stime, size_t size, time_t t)
@@ -398,15 +394,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 	FILE *xh = NULL;
 
 	struct ptest_list *p;
-	char stime[GET_STIME_BUF_SIZE];
 
-	pid_t child;
-	int pipefd_stdout[2] = {-1, -1};
-	int pipefd_stderr[2] = {-1, -1};
-	time_t sttime, entime;
-	time_t duration;
-	int slave;
-	int pgid = -1;
 
 	if (opts.xml_filename) {
 		xh = xml_create(ptest_list_length(head), opts.xml_filename);
@@ -423,12 +411,16 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 		fprintf(fp, "START: %s\n", progname);
 		PTEST_LIST_ITERATE_START(head, p)
+			int pipefd_stdout[2] = {-1, -1};
+			int pipefd_stderr[2] = {-1, -1};
+			int pgid = -1;
+
 			if ((rc = pipe2(pipefd_stdout, 0)) == -1)
 				break;
 
 			if ((rc = pipe2(pipefd_stderr, 0)) == -1) {
-				close(pipefd_stdout[0]);
-				close(pipefd_stdout[1]);
+				close(pipefd_stdout[PIPE_READ]);
+				close(pipefd_stdout[PIPE_WRITE]);
 				break;
 			}
 
@@ -443,16 +435,18 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				fprintf(fp, "ERROR: getpgid() failed, %s\n", strerror(errno));
 			}
 
-			child = fork();
+			pid_t child = fork();
 			if (child == -1) {
 				fprintf(fp, "ERROR: Fork %s\n", strerror(errno));
 				rc = -1;
 				break;
 			} else if (child == 0) {
+				int slave;
+
 				close(0);
 				/* Close read ends of the pipe */
-				do_close(&pipefd_stdout[0]);
-				do_close(&pipefd_stderr[0]);
+				do_close(&pipefd_stdout[PIPE_READ]);
+				do_close(&pipefd_stderr[PIPE_READ]);
 
 				if ((slave = setup_slave_pty(fp)) < 0) {
 					fprintf(fp, "ERROR: could not setup pty (%d).", slave);
@@ -469,37 +463,35 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 					fprintf(fp, "ERROR: Unable to attach to controlling tty, %s\n", strerror(errno));
 				}
 
-				run_child(p->run_ptest, pipefd_stdout[1], pipefd_stderr[1]);
+				run_child(p->run_ptest, pipefd_stdout[PIPE_WRITE], pipefd_stderr[PIPE_WRITE]);
 
 			} else {
-				int status;
+				bool timedout = false;
+				char stime[GET_STIME_BUF_SIZE];
 
 				/* Close write ends of the pipe, otherwise this process will never get EOF when the child dies */
-				do_close(&pipefd_stdout[1]);
-				do_close(&pipefd_stderr[1]);
+				do_close(&pipefd_stdout[PIPE_WRITE]);
+				do_close(&pipefd_stderr[PIPE_WRITE]);
 
-				_child_reader.fds[0] = pipefd_stdout[0];
-				_child_reader.fds[1] = pipefd_stderr[0];
-				_child_reader.fps[0] = fp;
-				_child_reader.fps[1] = fp_stderr;
-				_child_reader.timeout = opts.timeout;
-				_child_reader.timeouted = 0;
 				if (setpgid(child, pgid) == -1) {
 					fprintf(fp, "ERROR: setpgid() failed, %s\n", strerror(errno));
 				}
 
-				sttime = time(NULL);
-				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, sttime));
+				time_t start_time= time(NULL);
+				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, start_time));
 				fprintf(fp, "BEGIN: %s\n", ptest_dir);
 
-				set_nonblocking(_child_reader.fds[0]);
-				set_nonblocking(_child_reader.fds[1]);
-
 				struct pollfd pfds[2];
-				for (int i = 0; i < 2; i++) {
-					pfds[i].fd = _child_reader.fds[i];
-					pfds[i].events = POLLIN;
-				}
+				FILE* dest_fps[2];
+				set_nonblocking(pipefd_stdout[PIPE_READ]);
+				pfds[0].fd = pipefd_stdout[PIPE_READ];
+				pfds[0].events = POLLIN;
+				dest_fps[0] = fp;
+
+				set_nonblocking(pipefd_stderr[PIPE_READ]);
+				pfds[1].fd = pipefd_stderr[PIPE_READ];
+				pfds[1].events = POLLIN;
+				dest_fps[1] = fp_stderr;
 
 				while (true) {
 					/*
@@ -520,9 +512,9 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 						break;
 					}
 
-					int ret = poll(pfds, 2, _child_reader.timeout*1000);
+					int ret = poll(pfds, 2, opts.timeout*1000);
 
-					if (ret == 0 && !_child_reader.timeouted) {
+					if (ret == 0 && !timedout) {
 						/* kill the child if we haven't
 						 * already. Note that we
 						 * continue to read data from
@@ -530,7 +522,7 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 						 * sure we get all the output
 						 */
 						kill(-child, SIGKILL);
-						_child_reader.timeouted = 1;
+						timedout = true;
 					}
 
 					for (int i = 0; i < 2; i++) {
@@ -551,13 +543,13 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 								}
 								continue;
 							} else {
-								fwrite(buf, (size_t)n, 1, _child_reader.fps[i]);
+								fwrite(buf, (size_t)n, 1, dest_fps[i]);
 							}
 						}
 					}
 				}
 
-				if (_child_reader.timeouted) {
+				if (timedout) {
 					collect_system_state(fp);
 				} else {
 					/*
@@ -570,10 +562,11 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 					 */
 					kill(-child, SIGKILL);
 				}
+				int status;
 				waitpid(child, &status, 0);
 
-				entime = time(NULL);
-				duration = entime - sttime;
+				time_t end_time = time(NULL);
+				time_t duration = end_time - start_time;
 
 				int exit_code = -1;
 				if (WIFEXITED(status)) {
@@ -591,30 +584,25 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 					rc += 1;
 				}
 				fprintf(fp, "DURATION: %d\n", (int) duration);
-				if (_child_reader.timeouted) {
+				if (timedout) {
 					fprintf(fp, "TIMEOUT: %s\n", ptest_dir);
 					rc += 1;
 				}
 
 				if (opts.xml_filename)
-					xml_add_case(xh, exit_code, ptest_dir, _child_reader.timeouted, (int) duration);
+					xml_add_case(xh, exit_code, ptest_dir, timedout, (int) duration);
 
 				fprintf(fp, "END: %s\n", ptest_dir);
-				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, entime));
+				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, end_time));
 			}
 			free(ptest_dir);
-			do_close(&pipefd_stdout[0]);
-			do_close(&pipefd_stdout[1]);
-			do_close(&pipefd_stderr[0]);
-			do_close(&pipefd_stderr[1]);
+			do_close(&pipefd_stdout[PIPE_READ]);
+			do_close(&pipefd_stdout[PIPE_WRITE]);
+			do_close(&pipefd_stderr[PIPE_READ]);
+			do_close(&pipefd_stderr[PIPE_WRITE]);
 
 		PTEST_LIST_ITERATE_END
 		fprintf(fp, "STOP: %s\n", progname);
-
-		do_close(&pipefd_stdout[0]);
-		do_close(&pipefd_stdout[1]);
-		do_close(&pipefd_stderr[0]);
-		do_close(&pipefd_stderr[1]);
 	} while (0);
 
 	if (rc == -1)
