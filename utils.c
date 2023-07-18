@@ -601,6 +601,9 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			do_close(&pipefd_stderr[PIPE_READ]);
 			do_close(&pipefd_stderr[PIPE_WRITE]);
 
+			fflush(fp);
+			fflush(fp_stderr);
+
 		PTEST_LIST_ITERATE_END
 		fprintf(fp, "STOP: %s\n", progname);
 	} while (0);
@@ -610,6 +613,9 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 	if (opts.xml_filename)
 		xml_finish(xh);
+
+	fflush(fp);
+	fflush(fp_stderr);
 
 	return rc;
 }
