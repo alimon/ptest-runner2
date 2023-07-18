@@ -575,23 +575,20 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				entime = time(NULL);
 				duration = entime - sttime;
 
-				int exit_code = 0;
-
-				if (!_child_reader.timeouted) {
-					if (WIFEXITED(status)) {
-						exit_code = WEXITSTATUS(status);
-						if (exit_code) {
-							fprintf(fp, "\nERROR: Exit status is %d\n", exit_code);
-							rc += 1;
-						}
-					} else if (WIFSIGNALED(status)) {
-						int signal = WTERMSIG(status);
-						fprintf(fp, "\nERROR: Exited from signal %s (%d)\n", strsignal(signal), signal);
-						rc += 1;
-					} else {
-						fprintf(fp, "\nERROR: Exited for unknown reason (%d)\n", status);
+				int exit_code = -1;
+				if (WIFEXITED(status)) {
+					exit_code = WEXITSTATUS(status);
+					if (exit_code) {
+						fprintf(fp, "\nERROR: Exit status is %d\n", exit_code);
 						rc += 1;
 					}
+				} else if (WIFSIGNALED(status)) {
+					int signal = WTERMSIG(status);
+					fprintf(fp, "\nERROR: Exited from signal %s (%d)\n", strsignal(signal), signal);
+					rc += 1;
+				} else {
+					fprintf(fp, "\nERROR: Exited for unknown reason (%d)\n", status);
+					rc += 1;
 				}
 				fprintf(fp, "DURATION: %d\n", (int) duration);
 				if (_child_reader.timeouted) {
