@@ -201,12 +201,13 @@ START_TEST(test_run_ptests)
 END_TEST
 
 static void
-search_for_timeout_and_duration(const int rp, FILE *fp_stdout)
+search_for_timeout_error_and_duration(const int rp, FILE *fp_stdout)
 {
 	const char *timeout_str = "TIMEOUT";
 	const char *duration_str = "DURATION";
+	const char *error_str = "ERROR";
 	char line_buf[PRINT_PTEST_BUF_SIZE];
-	bool found_timeout = false, found_duration = false;
+	bool found_timeout = false, found_duration = false, found_error = false;
 	char *line = NULL;
 
 	ck_assert(rp != 0);
@@ -215,10 +216,12 @@ search_for_timeout_and_duration(const int rp, FILE *fp_stdout)
 		// once true, stay true
 		found_timeout = found_timeout ? found_timeout : find_word(line, timeout_str);
 		found_duration = found_duration ? found_duration : find_word(line, duration_str);
+		found_error = found_error ? found_error : find_word(line, error_str);
 	}
 
 	ck_assert_msg(found_timeout == true, "TIMEOUT not found");
 	ck_assert_msg(found_duration == true, "DURATION not found");
+	ck_assert_msg(found_error == true, "ERROR not found");
 }
 
 START_TEST(test_run_timeout_duration_ptest)
@@ -226,7 +229,7 @@ START_TEST(test_run_timeout_duration_ptest)
 	struct ptest_list *head = get_available_ptests(opts_directory);
 	unsigned int timeout = 1;
 
-	test_ptest_expected_failure(head, timeout, "hang", search_for_timeout_and_duration);
+	test_ptest_expected_failure(head, timeout, "hang", search_for_timeout_error_and_duration);
 
 	ptest_list_free_all(head);
 }
