@@ -415,12 +415,14 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			int pipefd_stderr[2] = {-1, -1};
 			int pgid = -1;
 
-			if ((rc = pipe2(pipefd_stdout, 0)) == -1)
+			if (pipe2(pipefd_stdout, 0) == -1) {
+				rc = -1;
 				break;
-
-			if ((rc = pipe2(pipefd_stderr, 0)) == -1) {
+			}
+			if (pipe2(pipefd_stderr, 0) == -1) {
 				close(pipefd_stdout[PIPE_READ]);
 				close(pipefd_stdout[PIPE_WRITE]);
+				rc = -1;
 				break;
 			}
 
