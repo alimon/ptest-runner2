@@ -327,7 +327,6 @@ static inline void
 run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 {
 	char *const argv[2] = {run_ptest, NULL};
-	chdir(dirname(strdup(run_ptest)));
 
 	dup2(fd_stdout, STDOUT_FILENO);
 	// XXX: Redirect stderr to stdout to avoid buffer ordering problems.
@@ -466,7 +465,11 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 					fprintf(fp, "ERROR: Unable to attach to controlling tty, %s\n", strerror(errno));
 				}
 
-				run_child(p->run_ptest, pipefd_stdout[PIPE_WRITE], pipefd_stderr[PIPE_WRITE]);
+				if (chdir(ptest_dir) == -1) {
+					fprintf(fp, "ERROR: Unable to chdir(%s), %s\n", ptest_dir, strerror(errno));
+				} else {
+					run_child(p->run_ptest, pipefd_stdout[PIPE_WRITE], pipefd_stderr[PIPE_WRITE]);
+				}
 
 			} else {
 				bool timedout = false;
