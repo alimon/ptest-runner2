@@ -118,7 +118,10 @@ get_available_ptests(const char *dir)
 	int saved_errno = -1; /* Initalize to invalid errno. */
 	char realdir[PATH_MAX];
 
-	realpath(dir, realdir);
+	if (realpath(dir, realdir) == NULL) {
+		fprintf(stderr, "ERROR: get_available_ptests failed to get realpath, %s\n", strerror(errno));
+		exit(1);
+	}
 
 	do
 	{
