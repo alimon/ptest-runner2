@@ -341,53 +341,6 @@ run_child(char *run_ptest, int fd_stdout, int fd_stderr)
 	/* exit(1); not needed? */
 }
 
-/* Returns an integer file descriptor.
- * If it returns < 0, an error has occurred.
- * Otherwise, it has returned the slave pty file descriptor.
- * fp should be writable, likely stdout/err.
- */
-static int
-setup_slave_pty(FILE *fp) {
-	int pty_master = -1;
-	int pty_slave = -1;
-	char pty_name[256];
-	struct group *gptr;
-	gid_t gid;
-	int slave = -1;
-
-	if (openpty(&pty_master, &pty_slave, pty_name, NULL, NULL) < 0) {
-		fprintf(fp, "ERROR: openpty() failed with: %s.\n", strerror(errno));
-		return -1;
-	}
-
-	if ((gptr = getgrnam(pty_name)) != 0) {
-		gid = gptr->gr_gid;
-	} else {
-		/* If the tty group does not exist, don't change the
-		 * group on the slave pty, only the owner
-		 */
-		gid = (gid_t)-1;
-	}
-
-	/* chown/chmod the corresponding pty, if possible.
-	 * This will only work if the process has root permissions.
-	 */
-	if (chown(pty_name, getuid(), gid) != 0) {
-		fprintf(fp, "ERROR; chown() failed with: %s.\n", strerror(errno));
-	}
-
-	/* Makes the slave read/writeable for the user. */
-	if (chmod(pty_name, S_IRUSR|S_IWUSR) != 0) {
-		fprintf(fp, "ERROR: chmod() failed with: %s.\n", strerror(errno));
-	}
-
-	if ((slave = open(pty_name, O_RDWR)) == -1) {
-		fprintf(fp, "ERROR: open() failed with: %s.\n", strerror(errno));
-	}
-	return (slave);
-}
-
-
 int
 run_ptests(struct ptest_list *head, const struct ptest_options opts,
 		const char *progname, FILE *fp, FILE *fp_stderr)
@@ -406,22 +359,28 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 	do
 	{
-		if (isatty(0) && ioctl(0, TIOCNOTTY) == -1) {
-			fprintf(fp, "ERROR: Unable to detach from controlling tty, %s\n", strerror(errno));
-		}
-
 
 		fprintf(fp, "START: %s\n", progname);
 		PTEST_LIST_ITERATE_START(head, p)
 			int pipefd_stdout[2] = {-1, -1};
 			int pipefd_stderr[2] = {-1, -1};
-			int pgid = -1;
+			int pty[2] = {-1, -1};
 
 			if (pipe2(pipefd_stdout, 0) == -1) {
 				rc = -1;
 				break;
 			}
 			if (pipe2(pipefd_stderr, 0) == -1) {
+				close(pipefd_stdout[PIPE_READ]);
+				close(pipefd_stdout[PIPE_WRITE]);
+				rc = -1;
+				break;
+			}
+
+			if (openpty(&pty[0], &pty[1], NULL, NULL, NULL) < 0) {
+				fprintf(fp, "ERROR: openpty() failed with: %s.\n", strerror(errno));
+				close(pipefd_stderr[PIPE_READ]);
+				close(pipefd_stderr[PIPE_WRITE]);
 				close(pipefd_stdout[PIPE_READ]);
 				close(pipefd_stdout[PIPE_WRITE]);
 				rc = -1;
@@ -435,37 +394,30 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 			}
 			dirname(ptest_dir);
 
-			if ((pgid = getpgid(0)) == -1) {
-				fprintf(fp, "ERROR: getpgid() failed, %s\n", strerror(errno));
-			}
-
 			pid_t child = fork();
 			if (child == -1) {
 				fprintf(fp, "ERROR: Fork %s\n", strerror(errno));
 				rc = -1;
 				break;
 			} else if (child == 0) {
-				int slave;
-
-				close(0);
 				/* Close read ends of the pipe */
 				do_close(&pipefd_stdout[PIPE_READ]);
 				do_close(&pipefd_stderr[PIPE_READ]);
 
-				if ((slave = setup_slave_pty(fp)) < 0) {
-					fprintf(fp, "ERROR: could not setup pty (%d).", slave);
-				}
-				if (setpgid(0,pgid) == -1) {
-					fprintf(fp, "ERROR: setpgid() failed, %s\n", strerror(errno));
-				}
+				/* Close master pty and set slave pty as stdin */
+				do_close(&pty[0]);
 
 				if (setsid() ==  -1) {
 					fprintf(fp, "ERROR: setsid() failed, %s\n", strerror(errno));
 				}
-
-				if (ioctl(0, TIOCSCTTY, NULL) == -1) {
+				if (ioctl(pty[1], TIOCSCTTY, NULL) == -1) {
 					fprintf(fp, "ERROR: Unable to attach to controlling tty, %s\n", strerror(errno));
 				}
+
+				if (dup2(pty[1], STDIN_FILENO) < 0) {
+					fprintf(fp, "ERROR: Unable to dup slave pty to stdin, %s\n", strerror(errno));
+				}
+				do_close(&pty[1]);
 
 				if (chdir(ptest_dir) == -1) {
 					fprintf(fp, "ERROR: Unable to chdir(%s), %s\n", ptest_dir, strerror(errno));
@@ -480,10 +432,6 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				/* Close write ends of the pipe, otherwise this process will never get EOF when the child dies */
 				do_close(&pipefd_stdout[PIPE_WRITE]);
 				do_close(&pipefd_stderr[PIPE_WRITE]);
-
-				if (setpgid(child, pgid) == -1) {
-					fprintf(fp, "ERROR: setpgid() failed, %s\n", strerror(errno));
-				}
 
 				time_t start_time= time(NULL);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, start_time));
