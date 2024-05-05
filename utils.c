@@ -350,7 +350,6 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 	struct ptest_list *p;
 
-
 	if (opts.xml_filename) {
 		xh = xml_create(ptest_list_length(head), opts.xml_filename);
 		if (!xh)
@@ -362,43 +361,37 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 
 		fprintf(fp, "START: %s\n", progname);
 		PTEST_LIST_ITERATE_START(head, p)
+			char ptest_dir[PATH_MAX] = {'\0'};
 			int pipefd_stdout[2] = {-1, -1};
 			int pipefd_stderr[2] = {-1, -1};
 			int pty[2] = {-1, -1};
 
+			strcpy(ptest_dir, p->run_ptest);
+			dirname(ptest_dir);
+
 			if (pipe2(pipefd_stdout, 0) == -1) {
+				fprintf(fp, "ERROR: pipe2() failed with: %s.\n", strerror(errno));
 				rc = -1;
-				break;
+				goto ptest_list_fail1;
 			}
+
 			if (pipe2(pipefd_stderr, 0) == -1) {
-				close(pipefd_stdout[PIPE_READ]);
-				close(pipefd_stdout[PIPE_WRITE]);
+				fprintf(fp, "ERROR: pipe2() failed with: %s.\n", strerror(errno));
 				rc = -1;
-				break;
+				goto ptest_list_fail2;
 			}
 
 			if (openpty(&pty[0], &pty[1], NULL, NULL, NULL) < 0) {
 				fprintf(fp, "ERROR: openpty() failed with: %s.\n", strerror(errno));
-				close(pipefd_stderr[PIPE_READ]);
-				close(pipefd_stderr[PIPE_WRITE]);
-				close(pipefd_stdout[PIPE_READ]);
-				close(pipefd_stdout[PIPE_WRITE]);
 				rc = -1;
-				break;
+				goto ptest_list_fail3;
 			}
-
-			char *ptest_dir = strdup(p->run_ptest);
-			if (ptest_dir == NULL) {
-				rc = -1;
-				break;
-			}
-			dirname(ptest_dir);
 
 			pid_t child = fork();
 			if (child == -1) {
 				fprintf(fp, "ERROR: Fork %s\n", strerror(errno));
 				rc = -1;
-				break;
+				goto ptest_list_fail4;
 			} else if (child == 0) {
 				/* Close read ends of the pipe */
 				do_close(&pipefd_stdout[PIPE_READ]);
@@ -424,7 +417,6 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				} else {
 					run_child(p->run_ptest, pipefd_stdout[PIPE_WRITE], pipefd_stderr[PIPE_WRITE]);
 				}
-
 			} else {
 				bool timedout = false;
 				char stime[GET_STIME_BUF_SIZE];
@@ -551,21 +543,30 @@ run_ptests(struct ptest_list *head, const struct ptest_options opts,
 				fprintf(fp, "END: %s\n", ptest_dir);
 				fprintf(fp, "%s\n", get_stime(stime, GET_STIME_BUF_SIZE, end_time));
 			}
-			free(ptest_dir);
-			do_close(&pipefd_stdout[PIPE_READ]);
-			do_close(&pipefd_stdout[PIPE_WRITE]);
+
+ptest_list_fail4:
+			do_close(&pty[0]);
+			do_close(&pty[1]);
+
+ptest_list_fail3:
 			do_close(&pipefd_stderr[PIPE_READ]);
 			do_close(&pipefd_stderr[PIPE_WRITE]);
+ptest_list_fail2:
+			do_close(&pipefd_stdout[PIPE_READ]);
+			do_close(&pipefd_stdout[PIPE_WRITE]);
 
+ptest_list_fail1:
 			fflush(fp);
 			fflush(fp_stderr);
+
+			if (rc == -1) {
+				fprintf(fp_stderr, "run_ptests fails: %s", strerror(errno));
+				break;
+			}
 
 		PTEST_LIST_ITERATE_END
 		fprintf(fp, "STOP: %s\n", progname);
 	} while (0);
-
-	if (rc == -1)
-		fprintf(fp_stderr, "run_ptests fails: %s", strerror(errno));
 
 	if (opts.xml_filename)
 		xml_finish(xh);
