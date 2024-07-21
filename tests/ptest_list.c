@@ -145,6 +145,67 @@ START_TEST(test_remove)
 }
 END_TEST
 
+START_TEST(test_remove_first)
+{
+	struct ptest_list *head = ptest_list_alloc();
+	struct ptest_list *p;
+
+	ptest_list_add(head, strdup("a"), NULL);
+	ptest_list_add(head, strdup("b"), NULL);
+	ptest_list_add(head, strdup("c"), NULL);
+
+	p = ptest_list_remove(head, "a", 0);
+	ck_assert_ptr_nonnull(p);
+	ck_assert_str_eq(p->ptest, "a");
+	ptest_list_free(p);
+
+	ck_assert_ptr_null(ptest_list_search(head, "a"));
+	ck_assert_ptr_nonnull(ptest_list_search(head, "b"));
+	ck_assert_ptr_nonnull(ptest_list_search(head, "c"));
+	ck_assert_int_eq(ptest_list_length(head), 2);
+
+	ptest_list_free_all(head);
+}
+END_TEST
+
+START_TEST(test_remove_last)
+{
+	struct ptest_list *head = ptest_list_alloc();
+	struct ptest_list *p;
+
+	ptest_list_add(head, strdup("a"), NULL);
+	ptest_list_add(head, strdup("b"), NULL);
+	ptest_list_add(head, strdup("c"), NULL);
+
+	p = ptest_list_remove(head, "c", 0);
+	ck_assert_ptr_nonnull(p);
+	ck_assert_str_eq(p->ptest, "c");
+	ptest_list_free(p);
+
+	ck_assert_ptr_nonnull(ptest_list_search(head, "a"));
+	ck_assert_ptr_nonnull(ptest_list_search(head, "b"));
+	ck_assert_ptr_null(ptest_list_search(head, "c"));
+	ck_assert_int_eq(ptest_list_length(head), 2);
+
+	ptest_list_free_all(head);
+}
+END_TEST
+
+START_TEST(test_remove_all)
+{
+	struct ptest_list *head = ptest_list_alloc();
+
+	ptest_list_add(head, strdup("a"), NULL);
+	ptest_list_add(head, strdup("b"), NULL);
+
+	ck_assert_ptr_null(ptest_list_remove(head, "a", 1));
+	ck_assert_ptr_null(ptest_list_remove(head, "b", 1));
+	ck_assert_int_eq(ptest_list_length(head), 0);
+
+	ptest_list_free_all(head);
+}
+END_TEST
+
 Suite *
 ptest_list_suite()
 {
@@ -160,6 +221,9 @@ ptest_list_suite()
 	tcase_add_test(tc_core, test_length);
 	tcase_add_test(tc_core, test_search);
 	tcase_add_test(tc_core, test_remove);
+	tcase_add_test(tc_core, test_remove_first);
+	tcase_add_test(tc_core, test_remove_last);
+	tcase_add_test(tc_core, test_remove_all);
 
 	suite_add_tcase(s, tc_core);
 
