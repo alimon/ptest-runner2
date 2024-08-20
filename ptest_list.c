@@ -206,7 +206,10 @@ ptest_list_remove(struct ptest_list *head, char *ptest, int free)
 		q = p->prev;
 		r = p->next;
 
-		q->next = r;
+		if (q != NULL)
+			q->next = r;
+		if (r != NULL)
+			r->prev = q;
 
 		if (free) {
 			ptest_list_free(p);
