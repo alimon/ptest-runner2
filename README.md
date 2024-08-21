@@ -48,8 +48,12 @@ $ mtrace ./ptest-runner $MALLOC_TRACE
 
 ## Contributions
 
-For contribute please send a patch with subject prefix "[ptest-runner]" to 
-yocto@lists.yoctoproject.org.
+For contribute please send a patch with subject prefix "[ptest-runner]" to
+yocto-patches@lists.yoctoproject.org.
+
+```
+git send-email --to=yocto-patches@lists.yoctoproject.org --subject-prefix='ptest-runner][PATCH' ...
+```
 
 ## Links
 
