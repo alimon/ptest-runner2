@@ -52,7 +52,7 @@ For contribute please send a patch with subject prefix "[ptest-runner]" to
 yocto-patches@lists.yoctoproject.org.
 
 ```
-git send-email --to=yocto-patches@lists.yoctoproject.org --subject-prefix='ptest-runner][PATCH' ...
+git send-email --to=yocto-patches@lists.yoctoproject.org --cc=anibal@limonsoftware.com --subject-prefix='ptest-runner][PATCH' ...
 ```
 
 ## Links
