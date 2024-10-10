@@ -45,9 +45,6 @@ $(TEST_EXECUTABLE): $(TEST_OBJECTS)
 check: $(TEST_EXECUTABLE)
 	PATH=.:$(PATH) ./$(TEST_EXECUTABLE) -d $(TEST_DATA)
 
-.c.o:
-	$(CC) $(CFLAGS) -c $< -o $@
-
 clean:
 	rm -rf $(EXECUTABLE) $(OBJECTS) $(TEST_EXECUTABLE) $(TEST_OBJECTS)
 
