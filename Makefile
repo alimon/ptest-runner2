@@ -27,8 +27,8 @@ EXECUTABLE=ptest-runner
 TEST_SOURCES=tests/main.c tests/ptest_list.c tests/utils.c $(BASE_SOURCES)
 TEST_OBJECTS=$(TEST_SOURCES:.c=.o)
 TEST_EXECUTABLE=ptest-runner-test
-TEST_LDFLAGS=-lm -lrt -lpthread
-TEST_LIBSTATIC=-lcheck -lsubunit -lutil
+TEST_CFLAGS=$(shell pkg-config --cflags check)
+TEST_LDFLAGS=$(shell pkg-config --libs check)
 
 TEST_DATA=$(shell echo `pwd`/tests/data)
 
@@ -40,7 +40,7 @@ $(EXECUTABLE): $(OBJECTS)
 tests: $(TEST_SOURCES) $(TEST_EXECUTABLE)
 
 $(TEST_EXECUTABLE): $(TEST_OBJECTS)
-	$(CC) $(LDFLAGS) $(TEST_OBJECTS) -o $@ $(TEST_LIBSTATIC) $(TEST_LDFLAGS)
+	$(CC) $(LDFLAGS) $(TEST_OBJECTS) -o $@ $(TEST_CFLAGS) $(TEST_LDFLAGS)
 
 check: $(TEST_EXECUTABLE)
 	PATH=.:$(PATH) ./$(TEST_EXECUTABLE) -d $(TEST_DATA)
